@@ -44,6 +44,9 @@ class AUEInventoryCharacter : public ACharacter
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* LookAction;
 
+	UPROPERTY(VisibleAnywhere, Category = "Inventory UI")
+	TObjectPtr<class UInventory> Inventory;
+
 public:
 	
 	AUEInventoryCharacter();

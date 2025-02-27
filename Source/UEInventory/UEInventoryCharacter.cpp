@@ -10,6 +10,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "Inventory.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -58,6 +59,30 @@ void AUEInventoryCharacter::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
+
+	// Since inventory isn't initialed through BP
+	// We'll set it up here once UEInventoryCharacter gets instantiated
+	if (!Inventory)
+	{
+		// Ensure we're using a valid owner
+		TWeakObjectPtr<APlayerController> playerController = Cast<APlayerController>(GetController());
+
+		if (playerController.IsValid())
+		{
+			// Create inventory widget
+			Inventory = CreateWidget<UInventory>(playerController.Get(), UInventory::StaticClass());
+			UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
+
+			// Check inventory widget creation was successful
+			// in order to add it to the viewport as hidden
+			if (Inventory)
+			{
+				Inventory->AddToViewport();
+				Inventory->SetVisibility(ESlateVisibility::Hidden);
+				UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
+			}
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
