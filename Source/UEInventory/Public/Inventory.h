@@ -33,33 +33,26 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FItem> Items;
-
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	bool bIsVisible;
 	
 protected:
 
 	virtual void NativeConstruct() override;
 
 public:
-
+	
 	void Create(uint64 Rows, uint64 Columns);
-
-	void AddItem(UTexture2D NewItem);
+	
+	void AddItem(TWeakObjectPtr<UTexture2D> NewItem);
 
 	void RemoveItem();
-
+	
 	void MoveItem();
 
 	void SortItem(FItem MovedItem, FItem ItemToMove);
-
+	
 	void Open();
-
+	
 	void Close();
-
-	bool GetIsVisible() const;
-
-	void SetIsVisible(bool bVisible);
-
+	
 	TArray<FItem>& GetItems();
 };
