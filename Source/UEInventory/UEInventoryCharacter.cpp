@@ -78,7 +78,7 @@ void AUEInventoryCharacter::BeginPlay()
 			if (Inventory)
 			{
 				Inventory->AddToViewport();
-				Inventory->SetVisibility(ESlateVisibility::Hidden);
+				Inventory->SetVisibility(ESlateVisibility::Visible);
 				UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
 			}
 		}
