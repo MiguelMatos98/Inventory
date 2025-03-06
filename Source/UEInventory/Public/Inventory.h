@@ -4,14 +4,15 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Components/CanvasPanel.h"
-#include "Components/CanvasPanelSlot.h"
-#include "Components/UniformGridSlot.h"
-#include "Components/UniformGridPanel.h"
-#include "Components/TextBlock.h"
-#include "Components/Border.h"
-#include "UEInventory/Item.h"
 #include "Inventory.generated.h"
+
+class UCanvasPanel;
+class UCanvasPanelSlot;
+class UUniformGridPanel;
+class UUniformGridSlot;
+class UTextBlock;
+class UBorder;
+struct FItem;
 
 UENUM(BlueprintType)
 enum class EDirection : uint8
@@ -30,10 +31,13 @@ class UEINVENTORY_API UInventory : public UUserWidget
 private:
 	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UCanvasPanel> RootCanvas;
+	TObjectPtr<UCanvasPanel> Canvas;
 
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UCanvasPanelSlot> GridSlot;
+	TObjectPtr<UCanvasPanelSlot> CanvasSlot;
+
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	TObjectPtr<UUniformGridSlot> GridSlot;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TObjectPtr<UUniformGridPanel> Grid;
@@ -45,7 +49,13 @@ private:
 	TObjectPtr<UTextBlock> Title;
 
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TArray<TObjectPtr<UBorder>> SlotBorders;
+	TArray<TObjectPtr<UBorder>> ForegroundBorders;
+
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	TObjectPtr<UBorder> BackgroundBorder;
+
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	TObjectPtr<UCanvasPanelSlot>  BackgroundBorderSlot;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FItem> Items;
