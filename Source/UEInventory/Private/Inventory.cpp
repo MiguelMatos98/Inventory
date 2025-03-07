@@ -9,7 +9,9 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/UniformGridPanel.h"
+#include "Components/VerticalBox.h"
 #include "Components/UniformGridSlot.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
 #include "UEInventory/Item.h"
@@ -21,22 +23,37 @@ void UInventory::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
-	if (!WidgetTree)
-	{
-		return;
-	}
+	if (!WidgetTree) return;
 
 	Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
-	if (Canvas)
-	{
+	if (!Canvas) return;
+	
 		// Add canvas to the root widget
 		WidgetTree->RootWidget = Canvas;
 
-		BackgroundBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		if (BackgroundBorder)
-		{
-			BackgroundBorder->SetBrushColor(FLinearColor::Gray);  // Example border color
+	BackgroundBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	if (!BackgroundBorder) return;
 		
+		BackgroundBorder->SetBrushColor(FLinearColor::Gray);  // Example border color
+
+	UVerticalBox* VerticalBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	if (!VerticalBox) return;
+	
+	Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	if (Title)
+	{
+		Title->SetText(FText::FromString(TEXT("Inventory")));
+	
+		//	Grab inventory's name slot and offset it 
+		UVerticalBoxSlot* TitleVSlot = VerticalBox->AddChildToVerticalBox(Title);
+		if (TitleVSlot)
+		{
+			// Center horizontally, add some top padding
+			TitleVSlot->SetHorizontalAlignment(HAlign_Center);
+			TitleVSlot->SetPadding(FMargin(0, 20, 0, 10));
+		}
+	}
+	
 			// Create instance of UUniformGridPanel at run time
 			Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
 			if (Grid)
@@ -44,9 +61,16 @@ void UInventory::NativeOnInitialized()
 				// Reduce padding in the grid itself to avoid extra spacing
 				Grid->SetSlotPadding(FMargin(10, 10, 10, 10));  // Reducing slot padding to minimal
 				
-				BackgroundBorder->SetContent(Grid);
+				UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid);
+				if (GridVSlot)
+				{
+					// Fill remaining space in the VerticalBox
+					GridVSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				}
 			}
 			
+			BackgroundBorder->SetContent(VerticalBox);
+	
 			// Add inventory grid to the canvas panel
 			Canvas->AddChild(BackgroundBorder);
 			
@@ -54,33 +78,8 @@ void UInventory::NativeOnInitialized()
 			if (BackgroundBorderSlot)
 			{
 				BackgroundBorderSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-				BackgroundBorderSlot->SetOffsets(FMargin(-300, -300, 300, 300));
+				BackgroundBorderSlot->SetOffsets(FMargin(-630, 50, 520, 520));
 			}
-		}
-		
-		//CanvasSlot = Cast<UCanvasPanelSlot>(Grid->Slot); 
-		//if (CanvasSlot)
-		//{
-		//	CanvasSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-		//	CanvasSlot->SetOffsets(FMargin(-385, 385, 385,  385));  
-		//}
-		
-
-		Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-		if (Title)
-		{
-			Title->SetText(FText::FromString(TEXT("Inventory")));
-			Canvas->AddChild(Title);
-
-			//	Grab inventory's name slot and offset it 
-			TitleSlot = Cast<UCanvasPanelSlot>(Title->Slot);
-			if (TitleSlot)	
-			{
-				TitleSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-				TitleSlot->SetOffsets(FMargin(-300, -340, 200, 40));
-			}
-		}
-	}
 	
 	Create(3,4);
 }
