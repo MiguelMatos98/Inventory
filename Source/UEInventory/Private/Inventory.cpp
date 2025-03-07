@@ -24,31 +24,44 @@ void UInventory::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
-	if (!WidgetTree) return;
-
+	if (!WidgetTree)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WidgetTree is invalid"));
+		return;
+	}
 	Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
-	if (!Canvas) return;
-	
+	if (!Canvas)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Canvas is invalid"));
+		return;
+	}
 		// Add canvas to the root widget
 		WidgetTree->RootWidget = Canvas;
 
 	BackgroundBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	if (!BackgroundBorder) return;
-		
+	if (!BackgroundBorder)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BackgroundBorder is invalid"));
+		return;
+	}
 		BackgroundBorder->SetBrushColor(FLinearColor::Gray);  // Example border color
 
 	UVerticalBox* VerticalBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-	if (!VerticalBox) return;
+	if (!VerticalBox) {
+		UE_LOG(LogTemp, Warning, TEXT("VerticalBox is invalid"));
+		return;
+	}
 	
 	Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	if (Title)
 	{
+		UE_LOG(LogTemp, Error, TEXT("Title is valid"));
 		Title->SetText(FText::FromString(TEXT("Inventory")));
 	
 		//	Grab inventory's name slot and offset it 
-		UVerticalBoxSlot* TitleVSlot = VerticalBox->AddChildToVerticalBox(Title);
-		if (TitleVSlot)
+		if (UVerticalBoxSlot* TitleVSlot = VerticalBox->AddChildToVerticalBox(Title))
 		{
+			UE_LOG(LogTemp, Error, TEXT("TitleVSlot is valid"));
 			// Center horizontally, add some top padding
 			TitleVSlot->SetHorizontalAlignment(HAlign_Center);
 			TitleVSlot->SetPadding(FMargin(0, 20, 0, 10));
@@ -59,12 +72,13 @@ void UInventory::NativeOnInitialized()
 	Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
 	if (Grid)
 	{
+		UE_LOG(LogTemp, Error, TEXT("Grid is valid"));
 		// Reduce padding in the grid itself to avoid extra spacing
-		Grid->SetSlotPadding(FMargin(10, 10, 10, 10));  // Reducing slot padding to minimal
-		
-		UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid);
-		if (GridVSlot)
+		Grid->SetSlotPadding(FMargin(10, 16, 10, 16));  // Reducing slot padding to minimal
+
+		if (UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid))
 		{
+			UE_LOG(LogTemp, Error, TEXT("GridVSlot is valid"));
 			// Fill remaining space in the VerticalBox
 			GridVSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		}
@@ -78,8 +92,12 @@ void UInventory::NativeOnInitialized()
 	BackgroundBorderSlot = Cast<UCanvasPanelSlot>(BackgroundBorder->Slot);
 	if (BackgroundBorderSlot)
 	{
-		BackgroundBorderSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-		BackgroundBorderSlot->SetOffsets(FMargin(-630, 50, 520, 520));
+		BackgroundBorderSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+		BackgroundBorderSlot->SetOffsets(FMargin(-600, 100, 500, 500));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BackgroundBorderSlot is invalid"));
 	}
 	
 	Create(3,4);
