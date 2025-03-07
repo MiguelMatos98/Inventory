@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+// New File
 
 #include "Inventory.h"
 
@@ -54,32 +55,32 @@ void UInventory::NativeOnInitialized()
 		}
 	}
 	
-			// Create instance of UUniformGridPanel at run time
-			Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
-			if (Grid)
-			{
-				// Reduce padding in the grid itself to avoid extra spacing
-				Grid->SetSlotPadding(FMargin(10, 10, 10, 10));  // Reducing slot padding to minimal
-				
-				UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid);
-				if (GridVSlot)
-				{
-					// Fill remaining space in the VerticalBox
-					GridVSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
-				}
-			}
-			
-			BackgroundBorder->SetContent(VerticalBox);
+	// Create instance of UUniformGridPanel at run time
+	Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
+	if (Grid)
+	{
+		// Reduce padding in the grid itself to avoid extra spacing
+		Grid->SetSlotPadding(FMargin(10, 10, 10, 10));  // Reducing slot padding to minimal
+		
+		UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid);
+		if (GridVSlot)
+		{
+			// Fill remaining space in the VerticalBox
+			GridVSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
 	
-			// Add inventory grid to the canvas panel
-			Canvas->AddChild(BackgroundBorder);
-			
-			BackgroundBorderSlot = Cast<UCanvasPanelSlot>(BackgroundBorder->Slot);
-			if (BackgroundBorderSlot)
-			{
-				BackgroundBorderSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-				BackgroundBorderSlot->SetOffsets(FMargin(-630, 50, 520, 520));
-			}
+	BackgroundBorder->SetContent(VerticalBox);
+	
+	// Add inventory grid to the canvas panel
+	Canvas->AddChild(BackgroundBorder);
+	
+	BackgroundBorderSlot = Cast<UCanvasPanelSlot>(BackgroundBorder->Slot);
+	if (BackgroundBorderSlot)
+	{
+		BackgroundBorderSlot->SetAnchors(FAnchors(1, 1, 1, 1));
+		BackgroundBorderSlot->SetOffsets(FMargin(-630, 50, 520, 520));
+	}
 	
 	Create(3,4);
 }
