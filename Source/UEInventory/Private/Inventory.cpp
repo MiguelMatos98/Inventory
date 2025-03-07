@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+// New File
 
 #include "Inventory.h"
 
@@ -9,7 +10,9 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/UniformGridPanel.h"
+#include "Components/VerticalBox.h"
 #include "Components/UniformGridSlot.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
 #include "UEInventory/Item.h"
@@ -23,63 +26,78 @@ void UInventory::NativeOnInitialized()
 
 	if (!WidgetTree)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("WidgetTree is invalid"));
 		return;
 	}
-
 	Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
-	if (Canvas)
+	if (!Canvas)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Canvas is invalid"));
+		return;
+	}
 		// Add canvas to the root widget
 		WidgetTree->RootWidget = Canvas;
 
-		BackgroundBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		if (BackgroundBorder)
-		{
-			BackgroundBorder->SetBrushColor(FLinearColor::Gray);  // Example border color
-		
-			// Create instance of UUniformGridPanel at run time
-			Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
-			if (Grid)
-			{
-				// Reduce padding in the grid itself to avoid extra spacing
-				Grid->SetSlotPadding(FMargin(10, 10, 10, 10));  // Reducing slot padding to minimal
-				
-				BackgroundBorder->SetContent(Grid);
-			}
-			
-			// Add inventory grid to the canvas panel
-			Canvas->AddChild(BackgroundBorder);
-			
-			BackgroundBorderSlot = Cast<UCanvasPanelSlot>(BackgroundBorder->Slot);
-			if (BackgroundBorderSlot)
-			{
-				BackgroundBorderSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-				BackgroundBorderSlot->SetOffsets(FMargin(-300, -300, 300, 300));
-			}
-		}
-		
-		//CanvasSlot = Cast<UCanvasPanelSlot>(Grid->Slot); 
-		//if (CanvasSlot)
-		//{
-		//	CanvasSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-		//	CanvasSlot->SetOffsets(FMargin(-385, 385, 385,  385));  
-		//}
-		
+	BackgroundBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	if (!BackgroundBorder)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BackgroundBorder is invalid"));
+		return;
+	}
+		BackgroundBorder->SetBrushColor(FLinearColor::Gray);  // Example border color
 
-		Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-		if (Title)
+	UVerticalBox* VerticalBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+	if (!VerticalBox) {
+		UE_LOG(LogTemp, Warning, TEXT("VerticalBox is invalid"));
+		return;
+	}
+	
+	Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	if (Title)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Title is valid"));
+		Title->SetText(FText::FromString(TEXT("Inventory")));
+	
+		//	Grab inventory's name slot and offset it 
+		if (UVerticalBoxSlot* TitleVSlot = VerticalBox->AddChildToVerticalBox(Title))
 		{
-			Title->SetText(FText::FromString(TEXT("Inventory")));
-			Canvas->AddChild(Title);
-
-			//	Grab inventory's name slot and offset it 
-			TitleSlot = Cast<UCanvasPanelSlot>(Title->Slot);
-			if (TitleSlot)	
-			{
-				TitleSlot->SetAnchors(FAnchors(1, 1, 1, 1));
-				TitleSlot->SetOffsets(FMargin(-300, -340, 200, 40));
-			}
+			UE_LOG(LogTemp, Error, TEXT("TitleVSlot is valid"));
+			// Center horizontally, add some top padding
+			TitleVSlot->SetHorizontalAlignment(HAlign_Center);
+			TitleVSlot->SetPadding(FMargin(0, 20, 0, 10));
 		}
+	}
+	
+	// Create instance of UUniformGridPanel at run time
+	Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
+	if (Grid)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Grid is valid"));
+		// Reduce padding in the grid itself to avoid extra spacing
+		Grid->SetSlotPadding(FMargin(10, 16, 10, 16));  // Reducing slot padding to minimal
+
+		if (UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid))
+		{
+			UE_LOG(LogTemp, Error, TEXT("GridVSlot is valid"));
+			// Fill remaining space in the VerticalBox
+			GridVSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		}
+	}
+	
+	BackgroundBorder->SetContent(VerticalBox);
+	
+	// Add inventory grid to the canvas panel
+	Canvas->AddChild(BackgroundBorder);
+	
+	BackgroundBorderSlot = Cast<UCanvasPanelSlot>(BackgroundBorder->Slot);
+	if (BackgroundBorderSlot)
+	{
+		BackgroundBorderSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+		BackgroundBorderSlot->SetOffsets(FMargin(-600, 100, 500, 500));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BackgroundBorderSlot is invalid"));
 	}
 	
 	Create(3,4);
