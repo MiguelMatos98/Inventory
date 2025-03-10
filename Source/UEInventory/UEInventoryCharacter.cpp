@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
@@ -62,25 +63,21 @@ void AUEInventoryCharacter::BeginPlay()
 
 	// Since inventory isn't initialed through BP
 	// We'll set it up here once UEInventoryCharacter gets instantiated
-	if (!Inventory)
+	PlayerController = Cast<APlayerController>(GetController());
+
+	if (PlayerController)
 	{
-		// Ensure we're using a valid owner
-		TWeakObjectPtr<APlayerController> playerController = Cast<APlayerController>(GetController());
+		// Create inventory widget
+		Inventory = CreateWidget<UInventory>(PlayerController.Get(), UInventory::StaticClass());
+		UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
 
-		if (playerController.IsValid())
+		// Check inventory widget creation was successful
+		// in order to add it to the viewport as hidden
+		if (Inventory)
 		{
-			// Create inventory widget
-			Inventory = CreateWidget<UInventory>(playerController.Get(), UInventory::StaticClass());
-			UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
-
-			// Check inventory widget creation was successful
-			// in order to add it to the viewport as hidden
-			if (Inventory)
-			{
-				Inventory->AddToViewport();
-				Inventory->SetVisibility(ESlateVisibility::Visible);
-				UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
-			}
+			Inventory->AddToViewport();
+			Inventory->SetVisibility(ESlateVisibility::Visible);
+			UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
 		}
 	}
 }
@@ -90,8 +87,11 @@ void AUEInventoryCharacter::BeginPlay()
 
 void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	
 	// Add Input Mapping Context
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController)
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
@@ -101,6 +101,9 @@ void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
+
+		// Toggle Inventory
+		EnhancedInputComponent->BindAction(ToggleAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnToggle);
 		
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
@@ -160,10 +163,20 @@ void AUEInventoryCharacter::DisplayInventory()
 
 void AUEInventoryCharacter::OnToggle()
 {
+    
+	// Toggle visibility
+	if (Inventory->GetVisibility() == ESlateVisibility::Visible)
+	{
+		Inventory->Close();
+	}
+	else
+	{
+		Inventory->Open();
+	}
 }
 
 void AUEInventoryCharacter::OnClick()
-{
+{		
 }
 
 void AUEInventoryCharacter::OnDrag()
