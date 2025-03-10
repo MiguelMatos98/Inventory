@@ -92,8 +92,9 @@ void UInventory::NativeOnInitialized()
 	BackgroundBorderSlot = Cast<UCanvasPanelSlot>(BackgroundBorder->Slot);
 	if (BackgroundBorderSlot)
 	{
-		BackgroundBorderSlot->SetAnchors(FAnchors(0, 0, 1, 1));
-		BackgroundBorderSlot->SetOffsets(FMargin(-600, 100, 500, 500));
+		BackgroundBorderSlot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f));
+		BackgroundBorderSlot->SetAlignment(FVector2D(1.0f, 0.0f));
+		BackgroundBorderSlot->SetOffsets(FMargin(-50, 50, 510, 500));
 	}
 	else
 	{
@@ -105,7 +106,6 @@ void UInventory::NativeOnInitialized()
 
 void UInventory::Create(uint64 Rows, uint64 Columns)
 {
-
 	if (!Grid)
 	{
 		return;
@@ -130,8 +130,8 @@ void UInventory::Create(uint64 Rows, uint64 Columns)
 			if(GridSlot)
 			{
 				// Set the slot's alignment
-				GridSlot->SetHorizontalAlignment(EHorizontalAlignment::HAlign_Fill);
-				GridSlot->SetVerticalAlignment(EVerticalAlignment::VAlign_Fill);
+				GridSlot->SetHorizontalAlignment(HAlign_Fill);
+				GridSlot->SetVerticalAlignment(VAlign_Fill);
 			}
 		}
 	}
@@ -160,7 +160,7 @@ void UInventory::Open()
 
 void UInventory::Close()
 {
-    SetVisibility(ESlateVisibility::Hidden);
+    SetVisibility(ESlateVisibility::Collapsed);
 }
 
 TArray<FItem>& UInventory::GetItems()
