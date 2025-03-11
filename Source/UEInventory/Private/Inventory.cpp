@@ -16,6 +16,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
 #include "UEInventory/Item.h"
+#include "Materials/MaterialExpressionTextureSample.h"
 #include "Blueprint/WidgetTree.h"
 
 #endif // !INVENTORY_HEADERS_H
@@ -94,7 +95,7 @@ void UInventory::NativeOnInitialized()
 	{
 		BackgroundBorderSlot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f));
 		BackgroundBorderSlot->SetAlignment(FVector2D(1.0f, 0.0f));
-		BackgroundBorderSlot->SetOffsets(FMargin(-50, 50, 510, 500));
+		BackgroundBorderSlot->SetOffsets(FMargin(-50.0f, 50.0f, 510.0f, 500.0f));
 	}
 	else
 	{
@@ -137,8 +138,37 @@ void UInventory::Create(uint64 Rows, uint64 Columns)
 	}
 }
 
-void UInventory::AddItem(TWeakObjectPtr<UTexture2D> NewItem)
+void UInventory::AddItem(AActor* ItemActor)
 {
+	if (!ItemActor) return;
+
+
+	UStaticMeshComponent* MeshComponent = ItemActor->FindComponentByClass<UStaticMeshComponent>();
+
+	if (!MeshComponent) return;
+	
+		for (int32 i = 0; i < MeshComponent->GetNumMaterials(); i++)
+		{
+			UMaterialInterface* MaterialInterface = MeshComponent->GetMaterial(0);
+			if (!MaterialInterface) continue;
+
+			UMaterial* Material = MaterialInterface->GetBaseMaterial();
+			if (!Material) continue;
+				
+				for (UMaterialExpression* MaterialExpressions : Material->GetExpressions())
+				{
+					UMaterialExpressionTextureSample* TextureSample = Cast<UMaterialExpressionTextureSample>(MaterialExpressions);
+					if (TextureSample)
+					{
+						UTexture2D* Texture2D = Cast<UTexture2D>(TextureSample->Texture);
+						if (Texture2D)
+						{
+							Items.Add(FItem(ItemActor, Texture2D, true));
+							UE_LOG(LogTemp, Warning, TEXT("Texture Found: %s"), *Texture2D->GetName());
+						}
+					}
+				}
+		}
 }
 
 void UInventory::RemoveItem()

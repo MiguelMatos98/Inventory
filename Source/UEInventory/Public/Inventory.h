@@ -68,7 +68,7 @@ public:
 	
 	void Create(uint64 Rows, uint64 Columns);
 
-	void AddItem(TWeakObjectPtr<UTexture2D> NewItem);
+	void AddItem(AActor* ItemActor);
 	
 	void RemoveItem();
 	
