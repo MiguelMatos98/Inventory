@@ -54,6 +54,8 @@ AUEInventoryCharacter::AUEInventoryCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+
+	
 }
 
 void AUEInventoryCharacter::BeginPlay()
@@ -67,6 +69,10 @@ void AUEInventoryCharacter::BeginPlay()
 
 	if (PlayerController)
 	{
+		PlayerController->bShowMouseCursor = true;
+		PlayerController->bEnableClickEvents = true;
+		PlayerController->bEnableMouseOverEvents = true;
+		
 		// Create inventory widget
 		Inventory = CreateWidget<UInventory>(PlayerController.Get(), UInventory::StaticClass());
 		UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
@@ -101,8 +107,11 @@ void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-
-		// Toggle Inventory
+		
+		// Click
+		EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnClick);
+		
+		// Toggle
 		EnhancedInputComponent->BindAction(ToggleAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnToggle);
 		
 		// Jumping
@@ -163,7 +172,6 @@ void AUEInventoryCharacter::DisplayInventory()
 
 void AUEInventoryCharacter::OnToggle()
 {
-    
 	// Toggle visibility
 	if (Inventory->GetVisibility() == ESlateVisibility::Visible)
 	{
@@ -176,7 +184,30 @@ void AUEInventoryCharacter::OnToggle()
 }
 
 void AUEInventoryCharacter::OnClick()
-{		
+{
+	PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController) return;
+
+	FVector MouseWorldLocation, MouseWorldDirection;
+	if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
+	{
+		FHitResult Hit;
+		constexpr  float TraceDistance = 1000.0f;
+		FVector FinalTracePosition = MouseWorldLocation + ( MouseWorldDirection * TraceDistance);
+
+		FCollisionQueryParams CollisionQuery;
+		CollisionQuery.AddIgnoredActor(this);
+
+		if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
+			if ( Hit.GetActor())
+			{
+				Inventory->AddItem(Hit.GetActor());
+				UE_LOG(LogTemp, Warning, TEXT("Actor Found: %s"), *Hit.GetActor()->GetName());
+			}
+		}
+	}
 }
 
 void AUEInventoryCharacter::OnDrag()

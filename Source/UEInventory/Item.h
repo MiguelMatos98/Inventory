@@ -15,5 +15,10 @@ struct FItem
 	UPROPERTY(VisibleAnywhere, Category = "Items")
 	bool bIsDraggable;
 
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	TWeakObjectPtr<AActor> TextureOwner;
+
 	FItem();
+	
+	FItem(AActor* TextureOwner, UTexture2D* Texture, bool bIsDraggable);
 };
