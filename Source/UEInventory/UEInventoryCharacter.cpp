@@ -63,29 +63,7 @@ void AUEInventoryCharacter::BeginPlay()
 	// Call the base class  
 	Super::BeginPlay();
 
-	// Since inventory isn't initialed through BP
-	// We'll set it up here once UEInventoryCharacter gets instantiated
-	PlayerController = Cast<APlayerController>(GetController());
-
-	if (PlayerController)
-	{
-		PlayerController->bShowMouseCursor = true;
-		PlayerController->bEnableClickEvents = true;
-		PlayerController->bEnableMouseOverEvents = true;
-		
-		// Create inventory widget
-		Inventory = CreateWidget<UInventory>(PlayerController.Get(), UInventory::StaticClass());
-		UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
-
-		// Check inventory widget creation was successful
-		// in order to add it to the viewport as hidden
-		if (Inventory)
-		{
-			Inventory->AddToViewport();
-			Inventory->SetVisibility(ESlateVisibility::Visible);
-			UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
-		}
-	}
+	DisplayInventory();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -110,9 +88,13 @@ void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		
 		// Click
 		EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnClick);
+		if (ClickAction == nullptr)
+			UE_LOG(LogTemp, Warning, TEXT("Click action is null"));
 		
 		// Toggle
 		EnhancedInputComponent->BindAction(ToggleAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnToggle);
+		if (ToggleAction == nullptr)
+			UE_LOG(LogTemp, Warning, TEXT("Toggle action is null"));
 		
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
@@ -168,6 +150,36 @@ void AUEInventoryCharacter::Look(const FInputActionValue& Value)
 
 void AUEInventoryCharacter::DisplayInventory()
 {
+	if (!Inventory)
+	{
+		// Since inventory isn't initialed through BP
+		// We'll set it up here once UEInventoryCharacter gets instantiated
+		PlayerController = Cast<APlayerController>(GetController());
+
+		if (PlayerController)
+		{
+			PlayerController->bShowMouseCursor = true;
+			PlayerController->bEnableClickEvents = true;
+			PlayerController->bEnableMouseOverEvents = true;
+		
+			// Create inventory widget
+			Inventory = CreateWidget<UInventory>(PlayerController.Get(), UInventory::StaticClass());
+			UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
+
+			// Check inventory widget creation was successful
+			// in order to add it to the viewport as hidden
+			if (Inventory)
+			{
+				Inventory->AddToViewport();
+				Inventory->SetVisibility(ESlateVisibility::Visible);
+				UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp,  Warning, TEXT("Inventory has been already create"))
+	}
 }
 
 void AUEInventoryCharacter::OnToggle()
@@ -188,6 +200,8 @@ void AUEInventoryCharacter::OnClick()
 	PlayerController = Cast<APlayerController>(GetController());
 	if (!PlayerController) return;
 
+	UE_LOG(LogTemp, Warning, TEXT("Mouse Clicked"));
+
 	FVector MouseWorldLocation, MouseWorldDirection;
 	if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
 	{
@@ -197,6 +211,8 @@ void AUEInventoryCharacter::OnClick()
 
 		FCollisionQueryParams CollisionQuery;
 		CollisionQuery.AddIgnoredActor(this);
+
+		UE_LOG(LogTemp, Warning, TEXT("Mouse Projected to World"));
 
 		if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
 		{

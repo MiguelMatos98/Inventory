@@ -58,6 +58,9 @@ private:
 	TObjectPtr<UCanvasPanelSlot>  BackgroundBorderSlot;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	TObjectPtr<USceneCaptureComponent2D> SceneCaptureComponent;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FItem> Items;
 	
 protected:
@@ -65,6 +68,8 @@ protected:
 	virtual void NativeOnInitialized() override;
 
 public:
+
+	void UpdateItemDisplay(int32 SlotIndex, UTexture2D* NewTexture);
 	
 	void Create(uint64 Rows, uint64 Columns);
 
@@ -79,6 +84,10 @@ public:
 	void Open();
 	
 	void Close();
+
+	bool SaveTexture2DToPNG(UTexture2D* Texture, const FString& FilePath);
+	
+	UTexture2D* ConvertRenderTargetToTexture(UWorld* World, UTextureRenderTarget2D* RenderTarget);
 	
 	TArray<FItem>& GetItems();
 };

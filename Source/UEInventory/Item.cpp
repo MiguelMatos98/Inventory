@@ -2,14 +2,13 @@
 #include "Item.h"
 
 FItem::FItem()
-	: TextureOwner(nullptr), Texture(nullptr), bIsDraggable(false) 
+	: Texture(nullptr), OriginalPosition(FVector::ZeroVector)
 {
 	
 }
 
-FItem::FItem(AActor* TextureOwner, UTexture2D* Texture, bool bIsDraggable)
+FItem::FItem(UTexture2D* Texture, const FVector& OriginalPosition)
 {
-	this->TextureOwner = TextureOwner;
 	this->Texture = Texture;
-	this->bIsDraggable = bIsDraggable;
+	this->OriginalPosition = OriginalPosition;
 }

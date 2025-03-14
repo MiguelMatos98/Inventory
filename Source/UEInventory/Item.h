@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine\Texture2D.h"
 #include "Item.generated.h"
 
 USTRUCT(BlueprintType)
@@ -9,16 +8,15 @@ struct FItem
 {
 	GENERATED_BODY();
 
+	// The captured texture from the render target
 	UPROPERTY(VisibleAnywhere, Category = "Items")
 	TWeakObjectPtr<UTexture2D> Texture;
 
+	// Store the original 2D screen position (or world position if you prefer)
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	bool bIsDraggable;
-
-	UPROPERTY(VisibleAnywhere, Category = "Items")
-	TWeakObjectPtr<AActor> TextureOwner;
+	FVector OriginalPosition;
 
 	FItem();
-	
-	FItem(AActor* TextureOwner, UTexture2D* Texture, bool bIsDraggable);
+
+	FItem(UTexture2D* Texture, const FVector& OriginalPosition);
 };
