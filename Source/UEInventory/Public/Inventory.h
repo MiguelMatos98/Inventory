@@ -65,6 +65,8 @@ protected:
 	virtual void NativeOnInitialized() override;
 
 public:
+
+	void UpdateItemDisplay(int32 SlotIndex, UTexture2D* NewTexture);
 	
 	void Create(uint64 Rows, uint64 Columns);
 
@@ -79,6 +81,8 @@ public:
 	void Open();
 	
 	void Close();
+
+	UTexture2D* ConvertRenderTargetToTexture(UWorld* World, UTextureRenderTarget2D* RenderTarget);
 	
 	TArray<FItem>& GetItems();
 };
