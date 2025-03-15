@@ -68,7 +68,6 @@ void AUEInventoryCharacter::BeginPlay()
 
 //////////////////////////////////////////////////////////////////////////
 // Input
-
 void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);

@@ -7,16 +7,24 @@ USTRUCT(BlueprintType)
 struct FItem
 {
 	GENERATED_BODY();
-
-	// The captured texture from the render target
+	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	TWeakObjectPtr<UTexture2D> Texture;
-
-	// Store the original 2D screen position (or world position if you prefer)
+	TObjectPtr<UImage> Icon;
+	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	FVector OriginalPosition;
-
-	FItem();
-
-	FItem(UTexture2D* Texture, const FVector& OriginalPosition);
+	TObjectPtr<AActor> ReferencedActor;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	FVector WorldLocation;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	FVector2D IconPosition;
+	
+	FItem()
+	: Icon(nullptr)
+	, ReferencedActor(nullptr)
+	, WorldLocation(FVector::ZeroVector)
+	, IconPosition(FVector2D::ZeroVector)
+	{
+	}
 };
