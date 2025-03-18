@@ -3,6 +3,9 @@
 #include "CoreMinimal.h"
 #include "Item.generated.h"
 
+class UImage;
+class AActor;
+
 USTRUCT(BlueprintType)
 struct FItem
 {
@@ -12,7 +15,7 @@ struct FItem
 	TObjectPtr<UImage> Icon;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	TObjectPtr<AActor> ReferencedActor;
+	TSubclassOf<AActor> ReferencedActorClass;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
 	FVector WorldLocation;
@@ -22,7 +25,7 @@ struct FItem
 	
 	FItem()
 	: Icon(nullptr)
-	, ReferencedActor(nullptr)
+	, ReferencedActorClass(nullptr)
 	, WorldLocation(FVector::ZeroVector)
 	, IconPosition(FVector2D::ZeroVector)
 	{

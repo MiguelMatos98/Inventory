@@ -219,7 +219,6 @@ void AUEInventoryCharacter::OnClick()
 			if ( Hit.GetActor())
 			{
 				Inventory->AddItem(Hit.GetActor());
-				UE_LOG(LogTemp, Warning, TEXT("Actor Found: %s"), *Hit.GetActor()->GetName());
 			}
 		}
 	}

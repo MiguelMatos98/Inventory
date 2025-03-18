@@ -21,15 +21,16 @@
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
 #include "Components/Image.h"
-#include "Components/SceneCaptureComponent2D.h"
-#include "Engine/TextureRenderTarget2D.h"
 #include "Blueprint/WidgetTree.h"
-#include "ImageUtils.h"
+#include "GameFramework/Actor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Engine/Texture2D.h"
 
 #endif // !INVENTORY_HEADERS_H
+
+static constexpr uint64  MaxColumns = 4;
+static constexpr uint64  MaxRows = 3;
 
 void UInventory::NativeOnInitialized()
 {
@@ -112,7 +113,8 @@ void UInventory::NativeOnInitialized()
 		UE_LOG(LogTemp, Warning, TEXT("BackgroundBorderSlot is invalid"));
 	}
 	
-	Create(3,4);
+	Create(MaxRows, MaxColumns);
+
 }
 
 void UInventory::Create(uint64 Rows, uint64 Columns)
@@ -150,32 +152,30 @@ void UInventory::Create(uint64 Rows, uint64 Columns)
 
 void UInventory::AddItem(AActor* ItemActor)
 {
-    if (!ItemActor)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("ItemActor is null"));
-        return;
-    }
+	if (!ItemActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemActor is null"));
+		return;
+	}
 
-    FVector ActorWorldLocation = ItemActor->GetActorLocation();
-    TObjectPtr<APlayerController> PlayerController = GetWorld()->GetFirstPlayerController();
+	uint64 NewIndex = Items.Add(FItem());
+	// Record the actor's class for later respawn
+	Items[NewIndex].ReferencedActorClass = ItemActor->GetClass();
 
-    if (!PlayerController)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Player Controller doesn't exist"));
-        return;
-    }
+	if (Items[NewIndex].ReferencedActorClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ReferencedActorClass is valid"));	
+	}
+	// Record its location
+	Items[NewIndex].WorldLocation = ItemActor->GetActorLocation(); 
 
-    FVector2D ScreenLocation;
-    bool bProjected = PlayerController->ProjectWorldLocationToScreen(ActorWorldLocation, ScreenLocation);
+	if (!ItemActor->IsPendingKillPending())
+	{
+		// Remove the actor from the world
+		ItemActor->Destroy();
+	}
 
-    if (bProjected)
-    {
-    }
-    else
-    {
-        // Projection failed
-        UE_LOG(LogTemp, Warning, TEXT("Failed to project world location to screen"));
-    }
+	UE_LOG(LogTemp, Warning, TEXT("Item stored at: %s"), *Items[NewIndex].WorldLocation.ToString());
 }
 
 void UInventory::RemoveItem()

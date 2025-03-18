@@ -29,7 +29,6 @@ class UEINVENTORY_API UInventory : public UUserWidget
 	GENERATED_BODY()
 
 private:
-	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TObjectPtr<UCanvasPanel> Canvas;
 
