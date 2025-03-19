@@ -166,8 +166,13 @@ void UInventory::AddItem(AActor* ItemActor)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ReferencedActorClass is valid"));	
 	}
+	
 	// Record its location
-	Items[NewIndex].WorldLocation = ItemActor->GetActorLocation(); 
+	Items[NewIndex].WorldLocation = ItemActor->GetActorLocation();
+
+	// Set a predefined screen position for the icon (e.g., inventory grid slot)
+	Items[NewIndex].IconPosition = FVector2D(700, 400); // Example: Fixed position for simplicity
+	SpawnItemIcon(Items[NewIndex].IconPosition); // Spawn the icon at this position
 
 	if (!ItemActor->IsPendingKillPending())
 	{
@@ -176,6 +181,32 @@ void UInventory::AddItem(AActor* ItemActor)
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("Item stored at: %s"), *Items[NewIndex].WorldLocation.ToString());
+}
+
+void UInventory::SpawnItemIcon(FVector2D ScreenPosition)
+{
+	uint64 LastItemIndex = Items.Num() - 1; // Get the index of the last added item
+	if (LastItemIndex < 0 || !Items.IsValidIndex(LastItemIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid Item index"));
+		return;
+	}
+
+	// Create a UImage widget
+	Items[LastItemIndex].Icon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+	if (!Items[LastItemIndex].Icon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Icon Image is not valid"));
+		return;    
+	}
+
+	// Set the image properties
+	Items[LastItemIndex].Icon->SetColorAndOpacity(FLinearColor::Blue); 
+	Items[LastItemIndex].Icon->SetVisibility(ESlateVisibility::Visible);
+	Items[LastItemIndex].Icon->SetRenderScale(FVector2D(0.9f, 0.9f)); // Ensure no scaling happens
+
+	// Attach the image to the corresponding border in the grid
+	ForegroundBorders[LastItemIndex]->AddChild(Items[LastItemIndex].Icon);
 }
 
 void UInventory::RemoveItem()

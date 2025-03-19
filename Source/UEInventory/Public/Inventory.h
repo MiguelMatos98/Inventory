@@ -29,6 +29,7 @@ class UEINVENTORY_API UInventory : public UUserWidget
 	GENERATED_BODY()
 
 private:
+	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TObjectPtr<UCanvasPanel> Canvas;
 
@@ -55,9 +56,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TObjectPtr<UCanvasPanelSlot>  BackgroundBorderSlot;
-	
+
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<USceneCaptureComponent2D> SceneCaptureComponent;
+	TArray<TObjectPtr<UCanvasPanelSlot>> IconSlots;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FItem> Items;
@@ -67,20 +68,31 @@ protected:
 	virtual void NativeOnInitialized() override;
 
 public:
-	
+
+	UFUNCTION()
+	void SpawnItemIcon(FVector2D ScreenPosition);
+
+	UFUNCTION()
 	void Create(uint64 Rows, uint64 Columns);
 
+	UFUNCTION()
 	void AddItem(AActor* ItemActor);
-	
+
+	UFUNCTION()
 	void RemoveItem();
-	
+
+	UFUNCTION()
 	void MoveItem();
 
+	UFUNCTION()
 	void SortItem(FItem MovedItem, FItem ItemToMove);
-	
+
+	UFUNCTION()
 	void Open();
-	
+
+	UFUNCTION()
 	void Close();
-	
+
+	UFUNCTION()
 	TArray<FItem>& GetItems();
 };
