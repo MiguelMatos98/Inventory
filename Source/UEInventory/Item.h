@@ -3,20 +3,35 @@
 #include "CoreMinimal.h"
 #include "Item.generated.h"
 
+class UImage;
+class AActor;
+
 USTRUCT(BlueprintType)
 struct FItem
 {
 	GENERATED_BODY();
 
-	// The captured texture from the render target
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	TWeakObjectPtr<UTexture2D> Texture;
-
-	// Store the original 2D screen position (or world position if you prefer)
+	bool bIsSelected;
+	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	FVector OriginalPosition;
+	TSoftObjectPtr<UTexture2D> IconTexture;  // Store texture instead of UI widget
+	
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	TSubclassOf<AActor> ReferencedActorClass;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	FVector WorldLocation;
+	
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	FVector2D IconPosition;
 
-	FItem();
-
-	FItem(UTexture2D* Texture, const FVector& OriginalPosition);
+	FItem()
+		: bIsSelected(false)
+		, IconTexture(nullptr)
+		, ReferencedActorClass(nullptr)
+		, WorldLocation(FVector::ZeroVector)
+		, IconPosition(FVector2D::ZeroVector)
+	{
+	}
 };

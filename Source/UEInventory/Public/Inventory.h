@@ -56,12 +56,17 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TObjectPtr<UCanvasPanelSlot>  BackgroundBorderSlot;
-	
+
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<USceneCaptureComponent2D> SceneCaptureComponent;
+	TArray<TObjectPtr<UCanvasPanelSlot>> IconSlots;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Inventory")
 	TArray<FItem> Items;
+
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	bool bIsInventoryFull;
+	
+	static uint64 ItemCounter;
 	
 protected:
 
@@ -69,25 +74,33 @@ protected:
 
 public:
 
-	void UpdateItemDisplay(int32 SlotIndex, UTexture2D* NewTexture);
-	
+	UFUNCTION()
+	void SpawnItemIcon(FVector2D ScreenPosition);
+
+	UFUNCTION()
 	void Create(uint64 Rows, uint64 Columns);
 
+	UFUNCTION()
 	void AddItem(AActor* ItemActor);
-	
+
+	UFUNCTION()
 	void RemoveItem();
-	
+
+	UFUNCTION()
 	void MoveItem();
 
+	UFUNCTION()
 	void SortItem(FItem MovedItem, FItem ItemToMove);
-	
+
+	UFUNCTION()
 	void Open();
-	
+
+	UFUNCTION()
 	void Close();
 
-	bool SaveTexture2DToPNG(UTexture2D* Texture, const FString& FilePath);
+	UFUNCTION()
+	bool GetIsInventoryFull();
 	
-	UTexture2D* ConvertRenderTargetToTexture(UWorld* World, UTextureRenderTarget2D* RenderTarget);
-	
+	UFUNCTION()
 	TArray<FItem>& GetItems();
 };

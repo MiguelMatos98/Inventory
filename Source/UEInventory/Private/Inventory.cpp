@@ -19,21 +19,28 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Engine/LocalPlayer.h"
 #include "Components/Image.h"
-#include "Components/SceneCaptureComponent2D.h"
-#include "Engine/TextureRenderTarget2D.h"
 #include "Blueprint/WidgetTree.h"
-#include "ImageUtils.h"
+#include "GameFramework/Actor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Engine/Texture2D.h"
 
 #endif // !INVENTORY_HEADERS_H
 
+static constexpr uint64  MaxColumns = 4;
+static constexpr uint64  MaxRows = 3;
+
+uint64 UInventory::ItemCounter = 1;
+
 void UInventory::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+
+	bIsInventoryFull = false;
 
 	if (!WidgetTree)
 	{
@@ -112,26 +119,8 @@ void UInventory::NativeOnInitialized()
 		UE_LOG(LogTemp, Warning, TEXT("BackgroundBorderSlot is invalid"));
 	}
 	
-	Create(3,4);
-}
+	Create(MaxRows, MaxColumns);
 
-void UInventory::UpdateItemDisplay(int32 SlotIndex, UTexture2D* NewTexture)
-{
-	if (!NewTexture)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UpdateItemDisplay: NewTexture is null."));
-		return;
-	}
-
-	if (ForegroundBorders.IsValidIndex(SlotIndex) && ForegroundBorders[SlotIndex])
-	{
-		// Set the brush of the border to display the new texture.
-		ForegroundBorders[SlotIndex]->SetBrushFromTexture(NewTexture);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UpdateItemDisplay: Invalid SlotIndex %d."), SlotIndex);
-	}
 }
 
 void UInventory::Create(uint64 Rows, uint64 Columns)
@@ -165,85 +154,122 @@ void UInventory::Create(uint64 Rows, uint64 Columns)
 			}
 		}
 	}
+
+	ItemCounter = 1;
 }
 
 void UInventory::AddItem(AActor* ItemActor)
 {
-    if (!ItemActor)
+	if (!ItemActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemActor is null"));
+		return;
+	}
+
+	uint64 NewIndex = Items.Add(FItem());
+	// Record the actor's class for later respawn
+	Items[NewIndex].ReferencedActorClass = ItemActor->GetClass();
+
+	if (Items[NewIndex].ReferencedActorClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ReferencedActorClass is valid"));	
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AddItem: ReferencedActorClass is null for ItemActor"));
+		Items.RemoveAt(NewIndex); // Clean up the added item
+		return;
+		UE_LOG(LogTemp, Warning, TEXT("ReferencedActorClass is valid"));	
+	}
+	
+	// Record its location
+	Items[NewIndex].WorldLocation = ItemActor->GetActorLocation();
+
+	// Set a predefined screen position for the icon (e.g., inventory grid slot)
+	Items[NewIndex].IconPosition = FVector2D(700, 400); // Example: Fixed position for simplicity
+	SpawnItemIcon(Items[NewIndex].IconPosition); // Spawn the icon at this position
+
+	if (!ItemActor->IsPendingKillPending())
+	{
+		// Remove the actor from the world
+		ItemActor->Destroy();
+	}
+
+	if (Items.Num() >= 12)
+	{
+		bIsInventoryFull = true;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Item stored at: %s"), *Items[NewIndex].WorldLocation.ToString());
+}
+
+void UInventory::SpawnItemIcon(FVector2D ScreenPosition)
+{
+	const int32 LastItemIndex = Items.Num() - 1;
+    if (!Items.IsValidIndex(LastItemIndex) || !ForegroundBorders.IsValidIndex(LastItemIndex))
     {
-        UE_LOG(LogTemp, Warning, TEXT("ItemActor is null"));
+        UE_LOG(LogTemp, Warning, TEXT("SpawnItemIcon: Invalid item or border index %d"), LastItemIndex);
         return;
     }
 
-    FVector ActorWorldLocation = ItemActor->GetActorLocation();
-    TObjectPtr<APlayerController> PlayerController = GetWorld()->GetFirstPlayerController();
-
-    if (!PlayerController)
+    TObjectPtr<UOverlay> IconOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
+    if (!IconOverlay)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Player Controller doesn't exist"));
+        UE_LOG(LogTemp, Warning, TEXT("SpawnItemIcon: Failed to create overlay"));
         return;
     }
 
-    FVector2D ScreenLocation;
-    bool bProjected = PlayerController->ProjectWorldLocationToScreen(ActorWorldLocation, ScreenLocation);
-
-    if (bProjected)
+    TObjectPtr<UImage> ItemIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+    if (!ItemIcon)
     {
-        // Successfully projected to screen
-        UE_LOG(LogTemp, Log, TEXT("Screen X: %f, Screen Y: %f"), ScreenLocation.X, ScreenLocation.Y);
+        UE_LOG(LogTemp, Warning, TEXT("SpawnItemIcon: Icon Image is not valid"));
+        return;
+    }
 
-    	// Capture the 3D object as a 2D texture
-    	SceneCaptureComponent = NewObject<USceneCaptureComponent2D>(ItemActor);
-    	SceneCaptureComponent->RegisterComponent();
-        SceneCaptureComponent->AttachToComponent(ItemActor->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
-        SceneCaptureComponent->ShowOnlyActorComponents(ItemActor);
-
-        UTextureRenderTarget2D* RenderTarget = NewObject<UTextureRenderTarget2D>();
-        RenderTarget->ClearColor = FLinearColor::White;
-        RenderTarget->InitCustomFormat(512, 512, PF_B8G8R8A8, true);
-        SceneCaptureComponent->TextureTarget = RenderTarget;
-
-        if (SceneCaptureComponent)
-        {
-            // Capture the scene
-            SceneCaptureComponent->CaptureScene();
-
-        	UWorld* world = ItemActor->GetWorld();
-        	if (!world)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("World is null"));
-				return;
-			}
-            // Convert render target to Texture2D
-            UTexture2D* CapturedTexture = ConvertRenderTargetToTexture(world, SceneCaptureComponent->TextureTarget);
-
-            int32 SlotIndex = 0;
-            if (CapturedTexture)
-            {
-                // Display the captured texture in the UI
-                UE_LOG(LogTemp, Warning, TEXT("Successful conversion render target to texture"));
-                Items.Add(FItem(CapturedTexture, ActorWorldLocation));
-                UpdateItemDisplay(SlotIndex, Items[SlotIndex].Texture.Get());
-
-            	// Save the captured texture to PNG for debugging or persistence
-            	FString SavePath = FPaths::ProjectDir() / TEXT("Saved/MyTexture.png");
-            	bool bSuccess = SaveTexture2DToPNG(CapturedTexture, SavePath);
-            	UE_LOG(LogTemp, Log, TEXT("Texture save to %s was %s"), *SavePath, bSuccess ? TEXT("successful") : TEXT("unsuccessful"));
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Failed to convert render target to texture"));
-            }
-        }
+    // Assign texture if available
+    if (Items[LastItemIndex].IconTexture.IsValid())
+    {
+        ItemIcon->SetBrushFromTexture(Items[LastItemIndex].IconTexture.Get());
     }
     else
     {
-        // Projection failed
-        UE_LOG(LogTemp, Warning, TEXT("Failed to project world location to screen"));
+        ItemIcon->SetColorAndOpacity(FLinearColor::Blue); // Placeholder color
     }
+
+    TObjectPtr<UOverlaySlot> ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
+    if (ImageSlot)
+    {
+        ImageSlot->SetHorizontalAlignment(HAlign_Fill);
+        ImageSlot->SetVerticalAlignment(VAlign_Fill);
+    }
+
+    UTextBlock* ItemCounterText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+    if (ItemCounterText)
+    {
+        ItemCounterText->SetText(FText::AsNumber(ItemCounter));
+        ItemCounterText->SetColorAndOpacity(FLinearColor::Red);
+        ItemCounterText->SetJustification(ETextJustify::Center);
+        ItemCounterText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 20));
+
+        TObjectPtr<UOverlaySlot> TextOverlaySlot = IconOverlay->AddChildToOverlay(ItemCounterText);
+        if (TextOverlaySlot)
+        {
+            TextOverlaySlot->SetHorizontalAlignment(HAlign_Right);
+            TextOverlaySlot->SetVerticalAlignment(VAlign_Bottom);
+            TextOverlaySlot->SetPadding(FMargin(55, 50, 50, 65));
+        }
+    }
+
+    ForegroundBorders[LastItemIndex]->SetContent(IconOverlay);
+    ForegroundBorders[LastItemIndex]->SetVisibility(ESlateVisibility::Visible);
+
+    if (LastItemIndex == MaxRows * MaxColumns - 1)
+    {
+        bIsInventoryFull = true;
+    }
+
+    ItemCounter = (ItemCounter % 12) + 1;
 }
-
-
 
 void UInventory::RemoveItem()
 {
@@ -267,77 +293,9 @@ void UInventory::Close()
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
-bool UInventory::SaveTexture2DToPNG(UTexture2D* Texture, const FString& FilePath)
+bool UInventory::GetIsInventoryFull()
 {
-	if (!Texture || !Texture->GetPlatformData() || Texture->GetPlatformData()->Mips.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Invalid texture or missing mips."));
-		return false;
-	}
-
-	// Access the first mip map.
-	FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
-	int32 Width = Mip.SizeX;
-	int32 Height = Mip.SizeY;
-
-	// Lock the bulk data to read the pixels.
-	void* Data = Mip.BulkData.Lock(LOCK_READ_ONLY);
-	if (!Data)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to lock texture data."));
-		return false;
-	}
-
-	// Copy the pixel data into an array of FColor.
-	TArray<FColor> ColorData;
-	ColorData.AddUninitialized(Width * Height);
-	FMemory::Memcpy(ColorData.GetData(), Data, Width * Height * sizeof(FColor));
-
-	// Unlock the bulk data.
-	Mip.BulkData.Unlock();
-
-	// Compress the pixel data to PNG format.
-	TArray64<uint8> PNGData;
-	FImageUtils::PNGCompressImageArray(Width, Height, ColorData, PNGData);
-
-	// Save the PNG data to disk.
-	if (!FFileHelper::SaveArrayToFile(PNGData, *FilePath))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to save PNG file to: %s"), *FilePath);
-		return false;
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("Successfully saved texture as PNG: %s"), *FilePath);
-	return true;
-}
-
-UTexture2D* UInventory::ConvertRenderTargetToTexture(UWorld* World, UTextureRenderTarget2D* RenderTarget)
-{
-	if (!RenderTarget) return nullptr;
-
-	FTextureRenderTargetResource* RenderTargetResource = RenderTarget->GameThread_GetRenderTargetResource();
-	FReadSurfaceDataFlags ReadPixelFlags;
-	TArray<FColor> OutBMP;
-
-	// Read the surface data
-	RenderTargetResource->ReadPixels(OutBMP, ReadPixelFlags);
-
-	// Create the texture
-	UTexture2D* NewTexture = UTexture2D::CreateTransient(RenderTarget->SizeX, RenderTarget->SizeY);
-    
-	// Lock the bulk data
-	FTexturePlatformData* PlatformData = NewTexture->GetPlatformData();
-	FTexture2DMipMap& Mip = PlatformData->Mips[0];
-	void* LockedData = Mip.BulkData.Lock(LOCK_READ_WRITE);
-    
-	// Copy pixel data into the new texture
-	FMemory::Memcpy(LockedData, OutBMP.GetData(), OutBMP.Num() * sizeof(FColor));
-    
-	// Unlock the bulk data and update the texture resource
-	Mip.BulkData.Unlock();
-	NewTexture->UpdateResource(); // Use UpdateResource() instead of UpdateResourceData()
-
-	return NewTexture;
+	return bIsInventoryFull;
 }
 
 TArray<FItem>& UInventory::GetItems()
