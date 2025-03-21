@@ -10,9 +10,12 @@ USTRUCT(BlueprintType)
 struct FItem
 {
 	GENERATED_BODY();
+
+	UPROPERTY(VisibleAnywhere, Category = "Items")
+	bool bIsSelected;
 	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
-	TObjectPtr<UImage> Icon;
+	TSoftObjectPtr<UTexture2D> IconTexture;  // Store texture instead of UI widget
 	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
 	TSubclassOf<AActor> ReferencedActorClass;
@@ -22,12 +25,13 @@ struct FItem
 	
 	UPROPERTY(VisibleAnywhere, Category = "Items")
 	FVector2D IconPosition;
-	
+
 	FItem()
-	: Icon(nullptr)
-	, ReferencedActorClass(nullptr)
-	, WorldLocation(FVector::ZeroVector)
-	, IconPosition(FVector2D::ZeroVector)
+		: bIsSelected(false)
+		, IconTexture(nullptr)
+		, ReferencedActorClass(nullptr)
+		, WorldLocation(FVector::ZeroVector)
+		, IconPosition(FVector2D::ZeroVector)
 	{
 	}
 };

@@ -12,7 +12,6 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Inventory.h"
-#include "Item.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
