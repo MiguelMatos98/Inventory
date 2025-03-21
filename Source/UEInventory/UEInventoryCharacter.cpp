@@ -12,6 +12,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Inventory.h"
+#include "Item.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -53,15 +54,15 @@ AUEInventoryCharacter::AUEInventoryCharacter()
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
-	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
-
-	
+	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++
 }
 
 void AUEInventoryCharacter::BeginPlay()
 {
 	// Call the base class  
 	Super::BeginPlay();
+
+	PlayerController = Cast<APlayerController>(GetController());
 
 	DisplayInventory();
 }
@@ -154,7 +155,6 @@ void AUEInventoryCharacter::DisplayInventory()
 		// Since inventory isn't initialed through BP
 		// We'll set it up here once UEInventoryCharacter gets instantiated
 		PlayerController = Cast<APlayerController>(GetController());
-
 		if (PlayerController)
 		{
 			PlayerController->bShowMouseCursor = true;
@@ -183,6 +183,12 @@ void AUEInventoryCharacter::DisplayInventory()
 
 void AUEInventoryCharacter::OnToggle()
 {
+	if (!PlayerController)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayerController is null"));
+		return;
+	}
+    
 	// Toggle visibility
 	if (Inventory->GetVisibility() == ESlateVisibility::Visible)
 	{
@@ -196,31 +202,35 @@ void AUEInventoryCharacter::OnToggle()
 
 void AUEInventoryCharacter::OnClick()
 {
-	PlayerController = Cast<APlayerController>(GetController());
-	if (!PlayerController) return;
+	if (!PlayerController || !Inventory) return;
 
-	UE_LOG(LogTemp, Warning, TEXT("Mouse Clicked"));
-
-	FVector MouseWorldLocation, MouseWorldDirection;
-	if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
+	if (!Inventory->GetIsInventoryFull())
 	{
-		FHitResult Hit;
-		constexpr  float TraceDistance = 1000.0f;
-		FVector FinalTracePosition = MouseWorldLocation + ( MouseWorldDirection * TraceDistance);
-
-		FCollisionQueryParams CollisionQuery;
-		CollisionQuery.AddIgnoredActor(this);
-
-		UE_LOG(LogTemp, Warning, TEXT("Mouse Projected to World"));
-
-		if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
+		FVector MouseWorldLocation, MouseWorldDirection;
+		if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
-			if ( Hit.GetActor())
+			FHitResult Hit;
+			constexpr float TraceDistance = 1000.0f;
+			FVector FinalTracePosition = MouseWorldLocation + (MouseWorldDirection * TraceDistance);
+
+			FCollisionQueryParams CollisionQuery;
+			CollisionQuery.AddIgnoredActor(this);
+
+			UE_LOG(LogTemp, Log, TEXT("Mouse Projected to World"));
+
+			if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
 			{
-				Inventory->AddItem(Hit.GetActor());
+				UE_LOG(LogTemp, Log, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
+				if (Hit.GetActor())
+				{
+					Inventory->AddItem(Hit.GetActor());
+				}
 			}
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Inventory is full"));
 	}
 }
 
