@@ -12,6 +12,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Inventory.h"
+#include "Components/Border.h"
+#include "Components/UniformGridPanel.h"
+#include "Components/UniformGridSlot.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -86,7 +89,7 @@ void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
 		
 		// Click
-		EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnClick);
+		EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Completed, this, &AUEInventoryCharacter::OnClick);
 		if (ClickAction == nullptr)
 			UE_LOG(LogTemp, Warning, TEXT("Click action is null"));
 		
@@ -169,6 +172,7 @@ void AUEInventoryCharacter::DisplayInventory()
 			if (Inventory)
 			{
 				Inventory->AddToViewport();
+				Inventory->SetIsEnabled(true);
 				Inventory->SetVisibility(ESlateVisibility::Visible);
 				UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
 			}
@@ -201,37 +205,118 @@ void AUEInventoryCharacter::OnToggle()
 
 void AUEInventoryCharacter::OnClick()
 {
-	if (!PlayerController || !Inventory) return;
+    if (!PlayerController || !Inventory)
+    {
+        return;
+    }
 
-	if (!Inventory->GetIsInventoryFull())
-	{
-		FVector MouseWorldLocation, MouseWorldDirection;
-		if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
-		{
-			FHitResult Hit;
-			constexpr float TraceDistance = 1000.0f;
-			FVector FinalTracePosition = MouseWorldLocation + (MouseWorldDirection * TraceDistance);
+    FPointerEvent MouseEvent; // (Populate this as needed.)
+    int64 HoveredIndex = Inventory->FindHoveredItemIndex(MouseEvent);
 
-			FCollisionQueryParams CollisionQuery;
-			CollisionQuery.AddIgnoredActor(this);
+    // If an item is being dragged, finalize its position.
+    if (HoveredIndex != INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Log, TEXT("Dragging item at index %lld"), HoveredIndex);
+        Inventory->MoveItem(MouseEvent, false, true); // Drop the item
+        return;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Log, TEXT("Item at index not dragged %lld"), HoveredIndex);
+    }
 
-			UE_LOG(LogTemp, Log, TEXT("Mouse Projected to World"));
+    if (!Inventory->GetIsInventoryFull())
+    {
+        FVector MouseWorldLocation, MouseWorldDirection;
+        if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
+        {
+            FHitResult Hit;
+            constexpr float TraceDistance = 1000.0f;
+            FVector FinalTracePosition = MouseWorldLocation + (MouseWorldDirection * TraceDistance);
 
-			if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
-			{
-				UE_LOG(LogTemp, Log, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
-				if (Hit.GetActor())
-				{
-					Inventory->AddItem(Hit.GetActor());
-				}
-			}
-		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Inventory is full"));
-	}
+            FCollisionQueryParams CollisionQuery;
+            CollisionQuery.AddIgnoredActor(this);
+
+            UE_LOG(LogTemp, Log, TEXT("Mouse Projected to World"));
+
+            if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
+            {
+                UE_LOG(LogTemp, Log, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
+                if (Hit.GetActor())
+                {
+                    // Project hit location to screen space.
+                    FVector2D ScreenPosition;
+                    PlayerController->ProjectWorldLocationToScreen(Hit.Location, ScreenPosition);
+                    UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport Space): %s"), *ScreenPosition.ToString());
+
+                    // Get the grid panel.
+                    UUniformGridPanel* GridPanel = Inventory->GetGrid();
+                    if (GridPanel)
+                    {
+                        // Convert the screen position to the grid panel's local space.
+                        FVector2D LocalMousePosition = GridPanel->GetCachedGeometry().AbsoluteToLocal(ScreenPosition);
+                        UE_LOG(LogTemp, Log, TEXT("Local Mouse Position: %s"), *LocalMousePosition.ToString());
+
+                        // Get the overall grid size.
+                        FVector2D GridPanelSize = GridPanel->GetCachedGeometry().GetLocalSize();
+                        // Calculate cell size using your predefined MaxColumns and MaxRows.
+                        FVector2D CellSize = FVector2D(GridPanelSize.X / UInventory::MaxColumns,
+                                                       GridPanelSize.Y / UInventory::MaxRows);
+                        UE_LOG(LogTemp, Log, TEXT("Grid Size: %s"), *GridPanelSize.ToString());
+
+                        bool bFoundSlot = false;
+                        // Loop through each item.
+                        for (int32 i = 0; i < Inventory->GetItems().Num(); ++i)
+                        {
+                            if (Inventory->GetItems().IsValidIndex(i) &&
+                                Inventory->GetForegroundBorders().IsValidIndex(i))
+                            {
+                                UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Inventory->GetForegroundBorders()[i]->Slot);
+                                if (GridSlot)
+                                {
+                                    int32 Row = GridSlot->GetRow();
+                                    int32 Column = GridSlot->GetColumn();
+
+                                    // Calculate bounds in the grid panel's local space.
+                                    FVector2D TopLeft = FVector2D(Column * CellSize.X, Row * CellSize.Y);
+                                    FVector2D BottomRight = TopLeft + CellSize;
+                                    UE_LOG(LogTemp, Log, TEXT("Border[%d] - TopLeft: %s, BottomRight: %s"),
+                                        i, *TopLeft.ToString(), *BottomRight.ToString());
+
+                                    // If the local mouse position falls inside this cell, finalize pickup.
+                                    if (LocalMousePosition.X >= TopLeft.X && LocalMousePosition.X <= BottomRight.X &&
+                                        LocalMousePosition.Y >= TopLeft.Y && LocalMousePosition.Y <= BottomRight.Y)
+                                    {
+                                        bFoundSlot = true;
+                                        // Finalize move: this updates the icon position.
+                                        Inventory->MoveItem(MouseEvent, false, true);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (!bFoundSlot)
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("No grid slot matched the local mouse position"));
+                        }
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("GridPanel not found!"));
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Inventory is full"));
+    }
 }
+
+
+
+
 
 void AUEInventoryCharacter::OnDrag()
 {

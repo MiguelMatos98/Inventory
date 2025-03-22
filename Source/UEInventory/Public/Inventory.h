@@ -12,6 +12,7 @@ class UUniformGridPanel;
 class UUniformGridSlot;
 class UTextBlock;
 class UBorder;
+class FReply;
 struct FItem;
 
 UENUM(BlueprintType)
@@ -74,6 +75,12 @@ protected:
 
 public:
 
+	static constexpr uint64  MaxColumns = 4;
+	static constexpr uint64  MaxRows = 3;
+
+	UFUNCTION()
+	int64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
+	
 	UFUNCTION()
 	void SpawnItemIcon(FVector2D ScreenPosition);
 
@@ -87,7 +94,7 @@ public:
 	void RemoveItem();
 
 	UFUNCTION()
-	void MoveItem();
+	void MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove);
 
 	UFUNCTION()
 	void SortItem(FItem MovedItem, FItem ItemToMove);
@@ -103,4 +110,8 @@ public:
 	
 	UFUNCTION()
 	TArray<FItem>& GetItems();
+
+	TArray<TObjectPtr<UBorder>> GetForegroundBorders();
+
+	TObjectPtr<UUniformGridPanel> GetGrid();
 };

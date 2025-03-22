@@ -28,11 +28,9 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Engine/Texture2D.h"
+#include "Blueprint/UserWidget.h"
 
 #endif // !INVENTORY_HEADERS_H
-
-static constexpr uint64  MaxColumns = 4;
-static constexpr uint64  MaxRows = 3;
 
 uint64 UInventory::ItemCounter = 1;
 
@@ -179,7 +177,6 @@ void UInventory::AddItem(AActor* ItemActor)
 		UE_LOG(LogTemp, Warning, TEXT("AddItem: ReferencedActorClass is null for ItemActor"));
 		Items.RemoveAt(NewIndex); // Clean up the added item
 		return;
-		UE_LOG(LogTemp, Warning, TEXT("ReferencedActorClass is valid"));	
 	}
 	
 	// Record its location
@@ -271,11 +268,138 @@ void UInventory::SpawnItemIcon(FVector2D ScreenPosition)
     ItemCounter = (ItemCounter % 12) + 1;
 }
 
-void UInventory::RemoveItem()
+int64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
 {
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	if (!PlayerController) return INDEX_NONE;
+
+	FVector2D ScreenMousePosition;
+	if (PlayerController->GetMousePosition(ScreenMousePosition.X, ScreenMousePosition.Y))
+	{
+		UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport Space): X=%f Y=%f"), ScreenMousePosition.X, ScreenMousePosition.Y);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get mouse position!"));
+		return INDEX_NONE;
+	}
+
+	// Adjust screen position by applying the correct scaling (if needed)
+	UGameViewportClient* ViewportClient = GetWorld()->GetGameViewport();
+	if (ViewportClient)
+	{
+		FIntPoint MouseIntPoint;
+		ViewportClient->Viewport->GetMousePos(MouseIntPoint);
+		ScreenMousePosition = FVector2D(MouseIntPoint);
+	}
+
+	for (int32 Index = 0; Index < ForegroundBorders.Num(); ++Index)
+	{
+		if (ForegroundBorders[Index])
+		{
+			FGeometry BorderGeometry = ForegroundBorders[Index]->GetCachedGeometry();
+			FVector2D BorderTopLeft = BorderGeometry.GetAbsolutePosition();
+			FVector2D BorderSize = BorderGeometry.GetLocalSize();
+			FVector2D BorderBottomRight = BorderTopLeft + BorderSize;
+
+			UE_LOG(LogTemp, Log, TEXT("Border[%d] - TopLeft: X=%f Y=%f, BottomRight: X=%f Y=%f"), Index, BorderTopLeft.X, BorderTopLeft.Y, BorderBottomRight.X, BorderBottomRight.Y);
+
+			// Check if the mouse is within the bounds of the current border (slot)
+			if (ScreenMousePosition.X >= BorderTopLeft.X && ScreenMousePosition.X <= BorderBottomRight.X &&
+				ScreenMousePosition.Y >= BorderTopLeft.Y && ScreenMousePosition.Y <= BorderBottomRight.Y)
+			{
+				UE_LOG(LogTemp, Log, TEXT("Hovered Index Found: %d"), Index);
+				return Index;
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("No hovered index found!"));
+	return INDEX_NONE;
 }
 
-void UInventory::MoveItem()
+
+void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove)
+{
+    int32 MovingIndex = INDEX_NONE;
+
+    // Find the currently selected item
+    for (int32 i = 0; i < Items.Num(); ++i)
+    {
+        if (Items[i].bIsSelected)
+        {
+            MovingIndex = i;
+            break;
+        }
+    }
+
+    if (bStartMove && MovingIndex == INDEX_NONE) // Start moving an item
+    {
+        int32 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
+        if (HoveredIndex != INDEX_NONE && Items.IsValidIndex(HoveredIndex))
+        {
+            // Deselect all items first
+            for (FItem& Item : Items)
+            {
+                Item.bIsSelected = false;
+            }
+
+            Items[HoveredIndex].bIsSelected = true;
+            UE_LOG(LogTemp, Warning, TEXT("Started moving item %d"), HoveredIndex);
+            return;
+        }
+    }
+    else if (!bStartMove && !bEndMove && MovingIndex != INDEX_NONE) // Update position while moving
+    {
+        if (ForegroundBorders.IsValidIndex(MovingIndex) && IconSlots.IsValidIndex(MovingIndex))
+        {
+            FVector2D ScreenPosition = InMouseEvent.GetScreenSpacePosition();
+            FVector2D LocalPosition = GetCachedGeometry().AbsoluteToLocal(ScreenPosition);
+
+            Items[MovingIndex].IconPosition = LocalPosition;
+
+            UCanvasPanelSlot* TargetSlot = IconSlots[MovingIndex];
+            if (TargetSlot)
+            {
+                TargetSlot->SetPosition(LocalPosition);
+            }
+        }
+    }
+    else if (bEndMove && MovingIndex != INDEX_NONE) // End movement
+    {
+        int32 TargetIndex = FindHoveredItemIndex(InMouseEvent);
+        if (TargetIndex != INDEX_NONE && Items.IsValidIndex(TargetIndex) && TargetIndex != MovingIndex)
+        {
+            SortItem(Items[MovingIndex], Items[TargetIndex]);
+
+            // Swap ForegroundBorders positions
+            if (ForegroundBorders.IsValidIndex(MovingIndex) && ForegroundBorders.IsValidIndex(TargetIndex))
+            {
+                UBorder* BorderA = ForegroundBorders[MovingIndex];
+                UBorder* BorderB = ForegroundBorders[TargetIndex];
+
+                if (BorderA && BorderB)
+                {
+                    UCanvasPanelSlot* SlotA = Cast<UCanvasPanelSlot>(BorderA->Slot);
+                    UCanvasPanelSlot* SlotB = Cast<UCanvasPanelSlot>(BorderB->Slot);
+
+                    if (SlotA && SlotB)
+                    {
+                        FVector2D TempPos = SlotA->GetPosition();
+                        SlotA->SetPosition(SlotB->GetPosition());
+                        SlotB->SetPosition(TempPos);
+                    }
+                }
+            }
+
+            UE_LOG(LogTemp, Warning, TEXT("Moved item from %d to %d"), MovingIndex, TargetIndex);
+        }
+
+        Items[MovingIndex].bIsSelected = false;
+    }
+}
+
+void UInventory::RemoveItem()
 {
 }
 
@@ -301,5 +425,15 @@ bool UInventory::GetIsInventoryFull()
 TArray<FItem>& UInventory::GetItems()
 {
 	return Items;
+}
+
+TArray<TObjectPtr<UBorder>> UInventory::GetForegroundBorders()
+{
+	return ForegroundBorders;
+}
+
+TObjectPtr<UUniformGridPanel> UInventory::GetGrid()
+{
+	return Grid;
 }
 
