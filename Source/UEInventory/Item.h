@@ -5,6 +5,7 @@
 
 class UImage;
 class AActor;
+class UTexture2D;
 
 USTRUCT(BlueprintType)
 struct FItem
