@@ -68,16 +68,30 @@ private:
 	bool bIsInventoryFull;
 	
 	static uint64 ItemCounter;
+
+	// Drag state variables
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	bool bIsDragging;
+    
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	int32 DraggedItemIndex;
+    
 	
 protected:
 
 	virtual void NativeOnInitialized() override;
 
+	// Override native mouse events:
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	
 public:
 
 	static constexpr uint64  MaxColumns = 4;
 	static constexpr uint64  MaxRows = 3;
 
+	
 	UFUNCTION()
 	int64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
 	
