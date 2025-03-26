@@ -12,14 +12,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Inventory.h"
-#include "Components/Border.h"
 #include "Components/UniformGridPanel.h"
-#include "Components/UniformGridSlot.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
-
-//////////////////////////////////////////////////////////////////////////
-// AUEInventoryCharacter
 
 AUEInventoryCharacter::AUEInventoryCharacter()
 {
@@ -69,49 +64,90 @@ void AUEInventoryCharacter::BeginPlay()
 	DisplayInventory();
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Input
 void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	
-	// Add Input Mapping Context
-	PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController)
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
-	
-	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
-		// Click
-		EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Completed, this, &AUEInventoryCharacter::OnClick);
-		if (ClickAction == nullptr)
-			UE_LOG(LogTemp, Warning, TEXT("Click action is null"));
-		
-		// Toggle
-		EnhancedInputComponent->BindAction(ToggleAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnToggle);
-		if (ToggleAction == nullptr)
-			UE_LOG(LogTemp, Warning, TEXT("Toggle action is null"));
-		
-		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::Move);
+    // Add Input Mapping Context
+    PlayerController = Cast<APlayerController>(GetController());
+    if (PlayerController)
+    {
+        if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+        {
+            if (DefaultMappingContext)
+            {
+                Subsystem->AddMappingContext(DefaultMappingContext, 0);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("DefaultMappingContext is null"));
+            }
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController is null"));
+    }
 
-		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::Look);
-	}
-	else
-	{
-		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
-	}
+    // Set up action bindings
+    if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+    {
+        // Click
+        if (ClickAction)
+        {
+            EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Started, this, &AUEInventoryCharacter::OnClick);
+            EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Completed, this, &AUEInventoryCharacter::OnClick);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("ClickAction is null"));
+        }
+
+        // Toggle
+        if (ToggleAction)
+        {
+            EnhancedInputComponent->BindAction(ToggleAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnToggle);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("ToggleAction is null"));
+        }
+
+        // Jumping
+        if (JumpAction)
+        {
+            EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+            EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("JumpAction is null"));
+        }
+
+        // Moving
+        if (MoveAction)
+        {
+            EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::Move);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("MoveAction is null"));
+        }
+
+        // Looking
+        if (LookAction)
+        {
+            EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::Look);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("LookAction is null"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system."), *GetNameSafe(this));
+    }
 }
 
 void AUEInventoryCharacter::Move(const FInputActionValue& Value)
@@ -203,29 +239,49 @@ void AUEInventoryCharacter::OnToggle()
 	}
 }
 
-void AUEInventoryCharacter::OnClick()
+void AUEInventoryCharacter::OnClick(const FInputActionValue& Value)
 {
-    if (!PlayerController || !Inventory)
+    if (!PlayerController || !Inventory) return;
+
+    FVector2D MousePosition;
+    if (!PlayerController->GetMousePosition(MousePosition.X, MousePosition.Y))
     {
         return;
     }
 
-    FPointerEvent MouseEvent; // (Populate this as needed.)
-    int64 HoveredIndex = Inventory->FindHoveredItemIndex(MouseEvent);
+    UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport Space): X=%f Y=%f"), MousePosition.X, MousePosition.Y);
 
-    // If an item is being dragged, finalize its position.
-    if (HoveredIndex != INDEX_NONE)
+    bool bIsPress = Value.GetMagnitude() > 0;
+    TSet<FKey> PressedButtons;
+    if (bIsPress)
     {
-        UE_LOG(LogTemp, Log, TEXT("Dragging item at index %lld"), HoveredIndex);
-        Inventory->MoveItem(MouseEvent, false, true); // Drop the item
-        return;
-    }
-    else
-    {
-        UE_LOG(LogTemp, Log, TEXT("Item at index not dragged %lld"), HoveredIndex);
+        PressedButtons.Add(EKeys::LeftMouseButton);
     }
 
-    if (!Inventory->GetIsInventoryFull())
+    FPointerEvent MouseEvent(
+        0,                          // PointerIndex
+        MousePosition,              // ScreenSpacePosition
+        MousePosition,              // LastScreenSpacePosition
+        PressedButtons,             // PressedButtons
+        EKeys::LeftMouseButton,     // EffectingButton
+        0.0f,                       // WheelDelta
+        FModifierKeysState()        // ModifierKeys
+    );
+
+    int32 HoveredIndex = Inventory->FindHoveredItemIndex(MouseEvent);
+
+    if (HoveredIndex != INDEX_NONE && bIsPress)
+    {
+        Inventory->MoveItem(MouseEvent, true, false);
+        return; // Slate handles dragging
+    }
+    else if (HoveredIndex != INDEX_NONE && !bIsPress)
+    {
+        return; // NativeOnMouseButtonUp handles release
+    }
+
+    // World pickup on press only
+    if (bIsPress && !Inventory->GetIsInventoryFull())
     {
         FVector MouseWorldLocation, MouseWorldDirection;
         if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
@@ -241,82 +297,19 @@ void AUEInventoryCharacter::OnClick()
 
             if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
             {
-                UE_LOG(LogTemp, Log, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
                 if (Hit.GetActor())
                 {
-                    // Project hit location to screen space.
-                    FVector2D ScreenPosition;
-                    PlayerController->ProjectWorldLocationToScreen(Hit.Location, ScreenPosition);
-                    UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport Space): %s"), *ScreenPosition.ToString());
-
-                    // Get the grid panel.
-                    UUniformGridPanel* GridPanel = Inventory->GetGrid();
-                    if (GridPanel)
-                    {
-                        // Convert the screen position to the grid panel's local space.
-                        FVector2D LocalMousePosition = GridPanel->GetCachedGeometry().AbsoluteToLocal(ScreenPosition);
-                        UE_LOG(LogTemp, Log, TEXT("Local Mouse Position: %s"), *LocalMousePosition.ToString());
-
-                        // Get the overall grid size.
-                        FVector2D GridPanelSize = GridPanel->GetCachedGeometry().GetLocalSize();
-                        // Calculate cell size using your predefined MaxColumns and MaxRows.
-                        FVector2D CellSize = FVector2D(GridPanelSize.X / UInventory::MaxColumns,
-                                                       GridPanelSize.Y / UInventory::MaxRows);
-                        UE_LOG(LogTemp, Log, TEXT("Grid Size: %s"), *GridPanelSize.ToString());
-
-                        bool bFoundSlot = false;
-                        // Loop through each item.
-                        for (int32 i = 0; i < Inventory->GetItems().Num(); ++i)
-                        {
-                            if (Inventory->GetItems().IsValidIndex(i) &&
-                                Inventory->GetForegroundBorders().IsValidIndex(i))
-                            {
-                                UUniformGridSlot* GridSlot = Cast<UUniformGridSlot>(Inventory->GetForegroundBorders()[i]->Slot);
-                                if (GridSlot)
-                                {
-                                    int32 Row = GridSlot->GetRow();
-                                    int32 Column = GridSlot->GetColumn();
-
-                                    // Calculate bounds in the grid panel's local space.
-                                    FVector2D TopLeft = FVector2D(Column * CellSize.X, Row * CellSize.Y);
-                                    FVector2D BottomRight = TopLeft + CellSize;
-                                    UE_LOG(LogTemp, Log, TEXT("Border[%d] - TopLeft: %s, BottomRight: %s"),
-                                        i, *TopLeft.ToString(), *BottomRight.ToString());
-
-                                    // If the local mouse position falls inside this cell, finalize pickup.
-                                    if (LocalMousePosition.X >= TopLeft.X && LocalMousePosition.X <= BottomRight.X &&
-                                        LocalMousePosition.Y >= TopLeft.Y && LocalMousePosition.Y <= BottomRight.Y)
-                                    {
-                                        bFoundSlot = true;
-                                        // Finalize move: this updates the icon position.
-                                        Inventory->MoveItem(MouseEvent, false, true);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (!bFoundSlot)
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("No grid slot matched the local mouse position"));
-                        }
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("GridPanel not found!"));
-                    }
+                    UE_LOG(LogTemp, Log, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
+                    Inventory->AddItem(Hit.GetActor());
                 }
             }
         }
     }
-    else
+    else if (bIsPress && Inventory->GetIsInventoryFull())
     {
         UE_LOG(LogTemp, Warning, TEXT("Inventory is full"));
     }
 }
-
-
-
-
 
 void AUEInventoryCharacter::OnDrag()
 {
