@@ -52,7 +52,6 @@ void UInventory::NativeOnInitialized()
         UE_LOG(LogTemp, Warning, TEXT("Canvas is invalid"));
         return;
     }
-
     WidgetTree->RootWidget = Canvas;
 
     BackgroundBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
@@ -61,11 +60,10 @@ void UInventory::NativeOnInitialized()
         UE_LOG(LogTemp, Warning, TEXT("BackgroundBorder is invalid"));
         return;
     }
-
     BackgroundBorder->SetBrushColor(FLinearColor::Gray);
 
     UVerticalBox* VerticalBox = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-    if (!VerticalBox) 
+    if (!VerticalBox)
     {
         UE_LOG(LogTemp, Warning, TEXT("VerticalBox is invalid"));
         return;
@@ -85,7 +83,7 @@ void UInventory::NativeOnInitialized()
     Grid = WidgetTree->ConstructWidget<UUniformGridPanel>(UUniformGridPanel::StaticClass());
     if (Grid)
     {
-        Grid->SetSlotPadding(FMargin(10, 16, 10, 16));
+        Grid->SetSlotPadding(FMargin(10, 10, 10, 10));
         if (UVerticalBoxSlot* GridVSlot = VerticalBox->AddChildToVerticalBox(Grid))
         {
             GridVSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
@@ -115,26 +113,40 @@ void UInventory::NativeOnInitialized()
 
 void UInventory::Create(uint64 Rows, uint64 Columns)
 {
-    if (!Grid) return;
-
+    if (!Grid)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Grid is null in Create()"));
+        return;
+    }
+    
     Grid->ClearChildren();
     ForegroundBorders.Empty();
 
+    // Create the grid slots and populate ForegroundBorders.
     for (uint64 CurrentRow = 0; CurrentRow < Rows; ++CurrentRow)
     {
         for (uint64 CurrentColumn = 0; CurrentColumn < Columns; ++CurrentColumn)
         {
-            ForegroundBorders.Add(WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass()));
-            ForegroundBorders.Last()->SetBrushColor(FLinearColor::Black);
-
-            GridSlot = Grid->AddChildToUniformGrid(ForegroundBorders.Last(), CurrentRow, CurrentColumn);
-            if (GridSlot)
+            UBorder* NewBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+            if (NewBorder)
             {
-                GridSlot->SetHorizontalAlignment(HAlign_Fill);
-                GridSlot->SetVerticalAlignment(VAlign_Fill);
+                NewBorder->SetBrushColor(FLinearColor::Black);
+                ForegroundBorders.Add(NewBorder);
+                
+                if (GridSlot = Grid->AddChildToUniformGrid(NewBorder, CurrentRow, CurrentColumn))
+                {
+                    GridSlot->SetHorizontalAlignment(HAlign_Fill);
+                    GridSlot->SetVerticalAlignment(VAlign_Fill);
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Failed to create Border at Row %llu, Column %llu"), CurrentRow, CurrentColumn);
             }
         }
     }
+    // Preallocate the Items array so that it matches the grid size.
+    Items.SetNum(Rows * Columns);
     ItemCounter = 1;
 }
 
@@ -145,11 +157,10 @@ FReply UInventory::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FP
         MoveItem(InMouseEvent, true, false);
         if (bIsDragging)
         {
-            UE_LOG(LogTemp, Log, TEXT("Dragging is true on mouse button down method"));
+            UE_LOG(LogTemp, Log, TEXT("Started dragging item."));
             return FReply::Handled().CaptureMouse(TakeWidget());
         }
     }
-    UE_LOG(LogTemp, Log, TEXT("Mouse Button Down Called"));
     return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
@@ -157,15 +168,7 @@ FReply UInventory::NativeOnMouseMove(const FGeometry& InGeometry, const FPointer
 {
     if (bIsDragging && DraggedItemIndex != INDEX_NONE)
     {
-        MoveItem(InMouseEvent, false, false); // Update dragged item position
-        // Add logging and hovered slot detection
-        FVector2D MousePos = InMouseEvent.GetScreenSpacePosition();
-        UE_LOG(LogTemp, Log, TEXT("Dragging - Screen Mouse Position: X=%f Y=%f"), MousePos.X, MousePos.Y);
-        int32 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
-        if (HoveredIndex != INDEX_NONE)
-        {
-            UE_LOG(LogTemp, Log, TEXT("Hovered slot index: %d"), HoveredIndex);
-        }
+        MoveItem(InMouseEvent, false, false);
         return FReply::Handled();
     }
     return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
@@ -183,54 +186,77 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
 
 void UInventory::AddItem(AActor* ItemActor)
 {
-	if (!ItemActor || Items.Num() >= MaxRows * MaxColumns) return;
-
-	uint64 NewIndex = Items.Add(FItem());
-	Items[NewIndex].ReferencedActorClass = ItemActor->GetClass();
-
-	if (Items[NewIndex].ReferencedActorClass)
-	{
-		Items[NewIndex].WorldLocation = ItemActor->GetActorLocation();
-		Items[NewIndex].IconPosition = FVector2D(700, 400); // Example: Fixed position for simplicity
-		SpawnItemIcon(Items[NewIndex].IconPosition);
-
-		ItemActor->Destroy();
-	}
-
-	if (Items.Num() >= MaxRows * MaxColumns)
-	{
-		bIsInventoryFull = true;
-	}
-}
-
-void UInventory::SpawnItemIcon(FVector2D ScreenPosition)
-{
-  const int32 LastItemIndex = Items.Num() - 1;
-    if (!Items.IsValidIndex(LastItemIndex) || !ForegroundBorders.IsValidIndex(LastItemIndex))
+    if (!ItemActor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Invalid item or border index %d"), LastItemIndex);
         return;
     }
 
-    TObjectPtr<UOverlay> IconOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
-    TObjectPtr<UImage> ItemIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-    
-    if (Items[LastItemIndex].IconTexture.IsValid())
+    // Find the first empty slot.
+    int32 EmptySlotIndex = INDEX_NONE;
+    for (int32 i = 0; i < Items.Num(); i++)
     {
-        ItemIcon->SetBrushFromTexture(Items[LastItemIndex].IconTexture.Get());
+        // An empty slot is assumed to have no referenced actor.
+        if (!Items[i].ReferencedActorClass)
+        {
+            EmptySlotIndex = i;
+            break;
+        }
+    }
+
+    // If no empty slot is found, the inventory is full.
+    if (EmptySlotIndex == INDEX_NONE)
+    {
+        bIsInventoryFull = true;
+        return;
+    }
+
+    // Assign the new item to the empty slot.
+    Items[EmptySlotIndex].ReferencedActorClass = ItemActor->GetClass();
+    Items[EmptySlotIndex].WorldLocation = ItemActor->GetActorLocation();
+    Items[EmptySlotIndex].IconPosition = FVector2D(700, 400); // Example fixed position
+
+    // Create the UI icon for this slot.
+    SpawnItemIcon(Items[EmptySlotIndex].IconPosition, EmptySlotIndex);
+
+    ItemActor->Destroy();
+
+    // If the last slot was just filled, mark inventory as full.
+    if (EmptySlotIndex == Items.Num() - 1)
+    {
+        bIsInventoryFull = true;
+    }
+}
+
+void UInventory::SpawnItemIcon(FVector2D ScreenPosition, int32 SlotIndex)
+{
+    if (!Items.IsValidIndex(SlotIndex) || !ForegroundBorders.IsValidIndex(SlotIndex))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Invalid item or border index %d"), SlotIndex);
+        return;
+    }
+
+    // Construct the overlay and image.
+    UOverlay* IconOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
+    UImage* ItemIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+    
+    if (Items[SlotIndex].IconTexture.IsValid())
+    {
+        ItemIcon->SetBrushFromTexture(Items[SlotIndex].IconTexture.Get());
     }
     else
     {
         ItemIcon->SetColorAndOpacity(FLinearColor::Blue); // Placeholder color
     }
 
-    TObjectPtr<UOverlaySlot> ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
+    // Add the image to the overlay.
+    UOverlaySlot* ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
     if (ImageSlot)
     {
         ImageSlot->SetHorizontalAlignment(HAlign_Fill);
         ImageSlot->SetVerticalAlignment(VAlign_Fill);
     }
 
+    // Create and add a text block for the item counter.
     UTextBlock* ItemCounterText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
     if (ItemCounterText)
     {
@@ -239,7 +265,7 @@ void UInventory::SpawnItemIcon(FVector2D ScreenPosition)
         ItemCounterText->SetJustification(ETextJustify::Center);
         ItemCounterText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 20));
 
-        TObjectPtr<UOverlaySlot> TextOverlaySlot = IconOverlay->AddChildToOverlay(ItemCounterText);
+        UOverlaySlot* TextOverlaySlot = IconOverlay->AddChildToOverlay(ItemCounterText);
         if (TextOverlaySlot)
         {
             TextOverlaySlot->SetHorizontalAlignment(HAlign_Right);
@@ -248,31 +274,37 @@ void UInventory::SpawnItemIcon(FVector2D ScreenPosition)
         }
     }
 
-    ForegroundBorders[LastItemIndex]->SetContent(IconOverlay);
-    ForegroundBorders[LastItemIndex]->SetVisibility(ESlateVisibility::Visible);
+    // Assign the constructed overlay to the correct border slot.
+    ForegroundBorders[SlotIndex]->SetContent(IconOverlay);
+    ForegroundBorders[SlotIndex]->SetVisibility(ESlateVisibility::Visible);
 
-    if (UCanvasPanelSlot* PanelSlot = Cast<UCanvasPanelSlot>(ForegroundBorders[LastItemIndex]->Slot))
+    // Optionally, add the canvas panel slot for further manipulation.
+    if (UCanvasPanelSlot* PanelSlot = Cast<UCanvasPanelSlot>(ForegroundBorders[SlotIndex]->Slot))
     {
         IconSlots.Add(PanelSlot);
     }
 
-    if (LastItemIndex == MaxRows * MaxColumns - 1)
+    // If this was the last slot, mark inventory as full.
+    if (SlotIndex == Items.Num() - 1)
     {
         bIsInventoryFull = true;
     }
 
+    // Update the item counter for display (if used).
     ItemCounter = (ItemCounter % 12) + 1;
 }
 
+
 int64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
 {
+    // Force layout on Grid to ensure geometry is updated.
     if (Grid)
     {
         Grid->ForceLayoutPrepass();
     }
 
     FVector2D MousePos = InMouseEvent.GetScreenSpacePosition();
-    UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport Space): X=%f Y=%f"), MousePos.X, MousePos.Y);
+    UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport): X=%f, Y=%f"), MousePos.X, MousePos.Y);
 
     if (!Grid || ForegroundBorders.Num() == 0)
     {
@@ -280,268 +312,235 @@ int64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
         return INDEX_NONE;
     }
 
-    // Log viewport size
-    FVector2D ViewportSize = FVector2D::ZeroVector;
-    if (GEngine && GEngine->GameViewport)
-    {
-        GEngine->GameViewport->GetViewportSize(ViewportSize);
-        UE_LOG(LogTemp, Log, TEXT("Viewport Size: X=%f Y=%f"), ViewportSize.X, ViewportSize.Y);
-    }
-
-    // Get widget geometry
-    FGeometry WidgetGeometry = GetCachedGeometry();
-    FVector2D WidgetSize = WidgetGeometry.GetLocalSize();
-    UE_LOG(LogTemp, Log, TEXT("Widget Render Transform Scale: X=%f Y=%f"), WidgetSize.X, WidgetSize.Y);
-    if (WidgetSize == FVector2D::ZeroVector)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Widget geometry has zero size!"));
-        return INDEX_NONE;
-    }
-    FVector2D WidgetTopLeft = WidgetGeometry.LocalToAbsolute(FVector2D(0, 0));
-    FVector2D WidgetBottomRight = WidgetTopLeft + WidgetSize;
-    WidgetBottomRight.X = FMath::Min(WidgetBottomRight.X, WidgetTopLeft.X + ViewportSize.X);
-    WidgetBottomRight.Y = FMath::Min(WidgetBottomRight.Y, WidgetTopLeft.Y + ViewportSize.Y);
-    UE_LOG(LogTemp, Log, TEXT("Widget Absolute TopLeft: X=%f Y=%f, Size: X=%f Y=%f"), 
-        WidgetTopLeft.X, WidgetTopLeft.Y, WidgetSize.X, WidgetSize.Y);
-
-    // Check widget bounds
-    if (MousePos.X < WidgetTopLeft.X || MousePos.X > WidgetBottomRight.X ||
-        MousePos.Y < WidgetTopLeft.Y || MousePos.Y > WidgetBottomRight.Y)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Mouse position is outside widget boundaries!"));
-        return INDEX_NONE;
-    }
-
-    // Get grid geometry
     FGeometry GridGeometry = Grid->GetCachedGeometry();
-    FVector2D GridSize = GridGeometry.GetLocalSize();
-    if (GridSize == FVector2D::ZeroVector)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Grid geometry has zero size!"));
-        return INDEX_NONE;
-    }
-    FVector2D GridTopLeft = GridGeometry.LocalToAbsolute(FVector2D(0, 0));
-    FVector2D GridBottomRight = GridTopLeft + GridSize;
-    UE_LOG(LogTemp, Log, TEXT("Grid Absolute TopLeft: X=%f Y=%f, Size: X=%f Y=%f"), 
-        GridTopLeft.X, GridTopLeft.Y, GridSize.X, GridSize.Y);
+    FVector2D GridAbsTopLeft = GridGeometry.LocalToAbsolute(FVector2D::ZeroVector);
+    FVector2D GridAbsSize = GridGeometry.GetLocalSize();
+    FVector2D GridAbsBottomRight = GridAbsTopLeft + GridAbsSize;
+    UE_LOG(LogTemp, Log, TEXT("Grid TopLeft: X=%f, Y=%f, Size: X=%f, Y=%f"),
+           GridAbsTopLeft.X, GridAbsTopLeft.Y, GridAbsSize.X, GridAbsSize.Y);
 
-    // Check grid bounds
-    if (MousePos.X < GridTopLeft.X || MousePos.X > GridBottomRight.X ||
-        MousePos.Y < GridTopLeft.Y || MousePos.Y > GridBottomRight.Y)
+    const float Tolerance = 10.f;
+    if (MousePos.X < GridAbsTopLeft.X - Tolerance || MousePos.X > GridAbsBottomRight.X + Tolerance ||
+        MousePos.Y < GridAbsTopLeft.Y - Tolerance || MousePos.Y > GridAbsBottomRight.Y + Tolerance)
     {
-        UE_LOG(LogTemp, Log, TEXT("Mouse position is outside grid boundaries!"));
+        UE_LOG(LogTemp, Warning, TEXT("Mouse outside grid boundaries."));
         return INDEX_NONE;
     }
 
-    // Check each slot (border)
     for (int32 i = 0; i < ForegroundBorders.Num(); i++)
     {
-        if (!ForegroundBorders[i]) continue;
+        if (!ForegroundBorders[i])
+            continue;
 
         FGeometry BorderGeometry = ForegroundBorders[i]->GetCachedGeometry();
-        FVector2D BorderSize = BorderGeometry.GetLocalSize();
-        if (BorderSize == FVector2D::ZeroVector)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Border[%d] geometry has zero size!"), i);
-            continue;
-        }
-        FVector2D BorderTopLeft = BorderGeometry.LocalToAbsolute(FVector2D(0, 0));
-        FVector2D BorderBottomRight = BorderTopLeft + BorderSize;
+        FVector2D BorderAbsTopLeft = BorderGeometry.LocalToAbsolute(FVector2D::ZeroVector);
+        FVector2D BorderAbsSize = BorderGeometry.GetLocalSize();
+        FVector2D BorderAbsBottomRight = BorderAbsTopLeft + BorderAbsSize;
 
-        UE_LOG(LogTemp, Log, TEXT("Border[%d] - Absolute TopLeft: X=%f Y=%f, BottomRight: X=%f Y=%f"), 
-            i, BorderTopLeft.X, BorderTopLeft.Y, BorderBottomRight.X, BorderBottomRight.Y);
+        UE_LOG(LogTemp, Log, TEXT("Border[%d] - TopLeft: X=%f, Y=%f; BottomRight: X=%f, Y=%f"),
+               i, BorderAbsTopLeft.X, BorderAbsTopLeft.Y, BorderAbsBottomRight.X, BorderAbsBottomRight.Y);
 
-        if (MousePos.X >= BorderTopLeft.X && MousePos.X <= BorderBottomRight.X &&
-            MousePos.Y >= BorderTopLeft.Y && MousePos.Y <= BorderBottomRight.Y)
+        if (MousePos.X >= BorderAbsTopLeft.X - Tolerance && MousePos.X <= BorderAbsBottomRight.X + Tolerance &&
+            MousePos.Y >= BorderAbsTopLeft.Y - Tolerance && MousePos.Y <= BorderAbsBottomRight.Y + Tolerance)
         {
-            UE_LOG(LogTemp, Log, TEXT("Mouse is over Border[%d]!"), i);
+            UE_LOG(LogTemp, Log, TEXT("Mouse is over Border[%d]"), i);
             return i;
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("No hovered index found!"));
+    UE_LOG(LogTemp, Warning, TEXT("No hovered index found."));
     return INDEX_NONE;
+}
+
+UOverlay* UInventory::FindDraggedOverlay(int32 ItemIndex)
+{
+    if (!Canvas)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Canvas is null in FindDraggedOverlay"));
+        return nullptr;
+    }
+
+    // Loop through all children of the canvas.
+    for (int32 i = 0; i < Canvas->GetChildrenCount(); i++)
+    {
+        if (UOverlay* ChildOverlay = Cast<UOverlay>(Canvas->GetChildAt(i)))
+        {
+            // Make sure there is at least one child before accessing index 0.
+            if (ChildOverlay->GetChildrenCount() > 0)
+            {
+                if (UImage* IconImage = Cast<UImage>(ChildOverlay->GetChildAt(0)))
+                {
+                    UTexture2D* Texture = Cast<UTexture2D>(IconImage->GetBrush().GetResourceObject());
+                    if (Texture == Items[ItemIndex].IconTexture.Get())
+                    {
+                        return ChildOverlay;
+                    }
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("ChildOverlay[%d] first child is not an image."), i);
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("ChildOverlay[%d] has no children."), i);
+            }
+        }
+    }
+    return nullptr;
 }
 
 void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove)
 {
-  int32 MovingIndex = DraggedItemIndex;
+    int32 MovingIndex = DraggedItemIndex;
+    FGeometry CanvasGeometry = Canvas->GetCachedGeometry();
 
     if (bStartMove && MovingIndex == INDEX_NONE)
     {
         int32 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
-        if (HoveredIndex != INDEX_NONE && Items.IsValidIndex(HoveredIndex))
+        if (HoveredIndex == INDEX_NONE)
         {
+            UE_LOG(LogTemp, Warning, TEXT("No hovered index found on drag start."));
+            return;
+        }
+
+        if (ForegroundBorders.IsValidIndex(HoveredIndex) && ForegroundBorders[HoveredIndex]->GetContent())
+        {
+            // Deselect all items; then (for this example) select the first item.
             for (FItem& Item : Items)
             {
                 Item.bIsSelected = false;
             }
-            Items[HoveredIndex].bIsSelected = true;
+            if (Items.Num() > 0)
+            {
+                Items[0].bIsSelected = true;
+            }
+
             DraggedItemIndex = HoveredIndex;
             bIsDragging = true;
 
-            // Reparent the existing overlay to the root Canvas
-            if (ForegroundBorders.IsValidIndex(HoveredIndex))
+            if (UBorder* Border = ForegroundBorders[HoveredIndex])
             {
-                UBorder* Border = ForegroundBorders[HoveredIndex];
-                if (Border)
+                if (UOverlay* OverlayToDrag = Cast<UOverlay>(Border->GetContent()))
                 {
-                    UOverlay* OverlayToDrag = Cast<UOverlay>(Border->GetContent());
-                    if (OverlayToDrag)
-                    {
-                        // Remove the overlay from the border
-                        Border->SetContent(nullptr);
-                        // Add it to the root Canvas
-                        Canvas->AddChild(OverlayToDrag);
-                        if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
-                        {
-                            DraggedSlot->SetSize(FVector2D(50.0f, 50.0f)); // Adjust size as needed
-                            DraggedSlot->SetZOrder(100); // Ensure it’s on top
+                    Border->SetContent(nullptr);
+                    Canvas->AddChild(OverlayToDrag);
 
-                            // Set initial position
-                            FVector2D ScreenPosition = InMouseEvent.GetScreenSpacePosition();
-                            FVector2D LocalPosition = GetCachedGeometry().AbsoluteToLocal(ScreenPosition);
-                            LocalPosition -= FVector2D(25.0f, 25.0f); // Center the icon under the cursor
-                            DraggedSlot->SetPosition(LocalPosition);
-                        }
+                    if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
+                    {
+                        DraggedSlot->SetSize(FVector2D(100.0f, 100.0f));
+                        DraggedSlot->SetZOrder(100);
+
+                        FVector2D ScreenPos = InMouseEvent.GetScreenSpacePosition();
+                        FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos) - FVector2D(1.0f, 1.0f);
+                        DraggedSlot->SetPosition(LocalPos);
                     }
                 }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("OverlayToDrag not found at hovered index %d"), HoveredIndex);
+                }
             }
-
-            UE_LOG(LogTemp, Log, TEXT("Started moving item %d"), HoveredIndex);
+            UE_LOG(LogTemp, Log, TEXT("Started moving item from slot %d"), HoveredIndex);
         }
         else
         {
-            UE_LOG(LogTemp, Log, TEXT("Cannot start drag at index %d"), HoveredIndex);
+            UE_LOG(LogTemp, Warning, TEXT("Cannot start drag at index %d: invalid index or no content."), HoveredIndex);
         }
     }
     else if (!bStartMove && !bEndMove && MovingIndex != INDEX_NONE)
     {
-        // Update the overlay position to follow the mouse
-        if (ForegroundBorders.IsValidIndex(MovingIndex))
+        UOverlay* OverlayToDrag = FindDraggedOverlay(MovingIndex);
+        if (OverlayToDrag)
         {
-            // The overlay is currently parented to the Canvas
-            UOverlay* OverlayToDrag = nullptr;
-            for (int32 i = 0; i < Canvas->GetChildrenCount(); i++)
+            FVector2D ScreenPos = InMouseEvent.GetScreenSpacePosition();
+            FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos);
+            if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
             {
-                UOverlay* ChildOverlay = Cast<UOverlay>(Canvas->GetChildAt(i));
-                if (ChildOverlay)
-                {
-                    // Check if this overlay belongs to the dragged item by matching its content
-                    if (UImage* IconImage = Cast<UImage>(ChildOverlay->GetChildAt(0)))
-                    {
-                        UTexture2D* Texture = Cast<UTexture2D>(IconImage->GetBrush().GetResourceObject());
-                        if (Texture == Items[MovingIndex].IconTexture.Get())
-                        {
-                            OverlayToDrag = ChildOverlay;
-                            break;
-                        }
-                    }
-                }
+                LocalPos -= FVector2D(1.0f, 1.0f);
+                DraggedSlot->SetPosition(LocalPos);
+                UE_LOG(LogTemp, Log, TEXT("Dragging item from slot %d to X=%f, Y=%f"), MovingIndex, LocalPos.X, LocalPos.Y);
             }
-
-            if (OverlayToDrag)
-            {
-                FVector2D ScreenPosition = InMouseEvent.GetScreenSpacePosition();
-                FVector2D LocalPosition = GetCachedGeometry().AbsoluteToLocal(ScreenPosition);
-                if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
-                {
-                    LocalPosition -= FVector2D(25.0f, 25.0f); // Center the icon under the cursor
-                    DraggedSlot->SetPosition(LocalPosition);
-                    UE_LOG(LogTemp, Log, TEXT("Dragging item %d to X=%f, Y=%f"), MovingIndex, LocalPosition.X, LocalPosition.Y);
-                }
-            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Dragged overlay not found during drag update for slot %d"), MovingIndex);
         }
     }
     else if (bEndMove && MovingIndex != INDEX_NONE)
     {
         int32 TargetIndex = FindHoveredItemIndex(InMouseEvent);
-        if (TargetIndex != INDEX_NONE && Items.IsValidIndex(TargetIndex) && TargetIndex != MovingIndex)
+        UE_LOG(LogTemp, Log, TEXT("Drop detected. MovingIndex: %d, TargetIndex: %d"), MovingIndex, TargetIndex);
+
+        if (TargetIndex != INDEX_NONE && ForegroundBorders.IsValidIndex(TargetIndex) && TargetIndex != MovingIndex)
         {
-            // Swap items
-            FItem TempItem = Items[MovingIndex];
-            Items[MovingIndex] = Items[TargetIndex];
-            Items[TargetIndex] = TempItem;
+            UOverlay* DraggedOverlay = FindDraggedOverlay(MovingIndex);
+            UOverlay* TargetOverlay = FindDraggedOverlay(TargetIndex);
 
-            // Swap the content of the borders
-            if (ForegroundBorders.IsValidIndex(MovingIndex) && ForegroundBorders.IsValidIndex(TargetIndex))
+            if (!DraggedOverlay)
             {
-                UOverlay* DraggedOverlay = nullptr;
-                for (int32 i = 0; i < Canvas->GetChildrenCount(); i++)
-                {
-                    UOverlay* ChildOverlay = Cast<UOverlay>(Canvas->GetChildAt(i));
-                    if (ChildOverlay)
-                    {
-                        if (UImage* IconImage = Cast<UImage>(ChildOverlay->GetChildAt(0)))
-                        {
-                            UTexture2D* Texture = Cast<UTexture2D>(IconImage->GetBrush().GetResourceObject());
-                            if (Texture == TempItem.IconTexture.Get())
-                            {
-                                DraggedOverlay = ChildOverlay;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                UOverlay* TargetOverlay = Cast<UOverlay>(ForegroundBorders[TargetIndex]->GetContent());
-
-                // Reparent the dragged overlay to the target slot
-                if (DraggedOverlay)
-                {
-                    Canvas->RemoveChild(DraggedOverlay);
-                    ForegroundBorders[TargetIndex]->SetContent(DraggedOverlay);
-                    ForegroundBorders[TargetIndex]->SetVisibility(ESlateVisibility::Visible);
-                }
-
-                // Reparent the target overlay (if any) to the original slot
-                if (TargetOverlay)
-                {
-                    ForegroundBorders[TargetIndex]->SetContent(nullptr);
-                    ForegroundBorders[MovingIndex]->SetContent(TargetOverlay);
-                    ForegroundBorders[MovingIndex]->SetVisibility(ESlateVisibility::Visible);
-                }
+                UE_LOG(LogTemp, Warning, TEXT("Dragged overlay not found during drop for slot %d"), MovingIndex);
+                bIsDragging = false;
+                DraggedItemIndex = INDEX_NONE;
+                return;
             }
 
-            UE_LOG(LogTemp, Log, TEXT("Moved item from %d to %d"), MovingIndex, TargetIndex);
+            // Remove the dragged overlay from canvas if still present.
+            if (Canvas->HasChild(DraggedOverlay))
+            {
+                Canvas->RemoveChild(DraggedOverlay);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Canvas does not contain dragged overlay for slot %d"), MovingIndex);
+            }
+
+            if (ForegroundBorders.IsValidIndex(MovingIndex) && ForegroundBorders.IsValidIndex(TargetIndex))
+            {
+                // Swap UI: if TargetOverlay is null, clear that slot.
+                ForegroundBorders[MovingIndex]->SetContent(TargetOverlay ? TargetOverlay : nullptr);
+                ForegroundBorders[TargetIndex]->SetContent(DraggedOverlay);
+                ForegroundBorders[MovingIndex]->SetVisibility(ESlateVisibility::Visible);
+                ForegroundBorders[TargetIndex]->SetVisibility(ESlateVisibility::Visible);
+
+                if (Items.IsValidIndex(MovingIndex) && Items.IsValidIndex(TargetIndex))
+                {
+                    Swap(Items[MovingIndex], Items[TargetIndex]);
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Invalid inventory indices for swap: %d, %d"), MovingIndex, TargetIndex);
+                }
+                UE_LOG(LogTemp, Log, TEXT("Swapped item from slot %d to slot %d"), MovingIndex, TargetIndex);
+                ForegroundBorders[TargetIndex]->InvalidateLayoutAndVolatility();
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Invalid ForegroundBorders indices during drop: %d, %d"), MovingIndex, TargetIndex);
+            }
         }
         else
         {
-            // Restore the overlay to its original slot
-            if (ForegroundBorders.IsValidIndex(MovingIndex))
+            // If target index is invalid, restore the dragged overlay to its original slot.
+            UOverlay* OverlayToRestore = FindDraggedOverlay(MovingIndex);
+            if (OverlayToRestore && ForegroundBorders.IsValidIndex(MovingIndex))
             {
-                UOverlay* OverlayToRestore = nullptr;
-                for (int32 i = 0; i < Canvas->GetChildrenCount(); i++)
-                {
-                    UOverlay* ChildOverlay = Cast<UOverlay>(Canvas->GetChildAt(i));
-                    if (ChildOverlay)
-                    {
-                        if (UImage* IconImage = Cast<UImage>(ChildOverlay->GetChildAt(0)))
-                        {
-                            UTexture2D* Texture = Cast<UTexture2D>(IconImage->GetBrush().GetResourceObject());
-                            if (Texture == Items[MovingIndex].IconTexture.Get())
-                            {
-                                OverlayToRestore = ChildOverlay;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (OverlayToRestore)
+                if (Canvas->HasChild(OverlayToRestore))
                 {
                     Canvas->RemoveChild(OverlayToRestore);
-                    ForegroundBorders[MovingIndex]->SetContent(OverlayToRestore);
-                    ForegroundBorders[MovingIndex]->SetVisibility(ESlateVisibility::Visible);
                 }
+                ForegroundBorders[MovingIndex]->SetContent(OverlayToRestore);
+                ForegroundBorders[MovingIndex]->SetVisibility(ESlateVisibility::Visible);
             }
-            UE_LOG(LogTemp, Log, TEXT("Drag canceled, no target slot found"));
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Unable to restore overlay for slot %d"), MovingIndex);
+            }
+            UE_LOG(LogTemp, Log, TEXT("Drag canceled or invalid target slot; restored original slot."));
         }
-
-        // Reset dragging state
-        Items[MovingIndex].bIsSelected = false;
-        DraggedItemIndex = INDEX_NONE;
+        // Reset drag state.
         bIsDragging = false;
+        DraggedItemIndex = INDEX_NONE;
     }
 }
 
