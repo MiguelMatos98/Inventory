@@ -94,9 +94,12 @@ public:
 	
 	UFUNCTION()
 	int64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
+
+	UFUNCTION()
+	UOverlay* FindDraggedOverlay(int32 ItemIndex);
 	
 	UFUNCTION()
-	void SpawnItemIcon(FVector2D ScreenPosition);
+	void SpawnItemIcon(FVector2D ScreenPosition, int32 SlotIndex);
 
 	UFUNCTION()
 	void Create(uint64 Rows, uint64 Columns);
