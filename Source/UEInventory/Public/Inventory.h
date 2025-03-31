@@ -11,6 +11,7 @@ class UCanvasPanelSlot;
 class UUniformGridPanel;
 class UUniformGridSlot;
 class UTextBlock;
+class UOverlay;
 class UBorder;
 class FReply;
 struct FItem;
@@ -93,13 +94,18 @@ public:
 
 	
 	UFUNCTION()
-	int64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
+	uint64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
 
 	UFUNCTION()
-	UOverlay* FindDraggedOverlay(int32 ItemIndex);
+	void CreateItemIcon(uint64 SlotIndex);
+
+	UFUNCTION()
+	void CreateIconCounterText(uint64 SlotIndex);
 	
 	UFUNCTION()
-	void SpawnItemIcon(FVector2D ScreenPosition, int32 SlotIndex);
+	uint64 FindFirstEmptySlot() const;
+
+	TObjectPtr<UOverlay> FindDraggedOverlay(uint64 ItemIndex);
 
 	UFUNCTION()
 	void Create(uint64 Rows, uint64 Columns);
@@ -109,6 +115,9 @@ public:
 
 	UFUNCTION()
 	void RemoveItem();
+
+	UFUNCTION()
+	EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
 
 	UFUNCTION()
 	void MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove);
@@ -123,7 +132,7 @@ public:
 	void Close();
 
 	UFUNCTION()
-	bool GetIsInventoryFull();
+	bool GetIsInventoryFull() const;
 	
 	UFUNCTION()
 	TArray<FItem>& GetItems();

@@ -127,7 +127,7 @@ void UInventory::Create(uint64 Rows, uint64 Columns)
     {
         for (uint64 CurrentColumn = 0; CurrentColumn < Columns; ++CurrentColumn)
         {
-            UBorder* NewBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+            TObjectPtr<UBorder> NewBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
             if (NewBorder)
             {
                 NewBorder->SetBrushColor(FLinearColor::Black);
@@ -192,16 +192,7 @@ void UInventory::AddItem(AActor* ItemActor)
     }
 
     // Find the first empty slot.
-    int32 EmptySlotIndex = INDEX_NONE;
-    for (int32 i = 0; i < Items.Num(); i++)
-    {
-        // An empty slot is assumed to have no referenced actor.
-        if (!Items[i].ReferencedActorClass)
-        {
-            EmptySlotIndex = i;
-            break;
-        }
-    }
+    uint64 EmptySlotIndex = FindFirstEmptySlot();
 
     // If no empty slot is found, the inventory is full.
     if (EmptySlotIndex == INDEX_NONE)
@@ -213,10 +204,11 @@ void UInventory::AddItem(AActor* ItemActor)
     // Assign the new item to the empty slot.
     Items[EmptySlotIndex].ReferencedActorClass = ItemActor->GetClass();
     Items[EmptySlotIndex].WorldLocation = ItemActor->GetActorLocation();
-    Items[EmptySlotIndex].IconPosition = FVector2D(700, 400); // Example fixed position
 
-    // Create the UI icon for this slot.
-    SpawnItemIcon(Items[EmptySlotIndex].IconPosition, EmptySlotIndex);
+    // Create the UI icon and counter for this slot.
+    CreateItemIcon(EmptySlotIndex);
+    CreateIconCounterText(EmptySlotIndex);
+    CreateIconCounterText(EmptySlotIndex);
 
     ItemActor->Destroy();
 
@@ -225,77 +217,12 @@ void UInventory::AddItem(AActor* ItemActor)
     {
         bIsInventoryFull = true;
     }
-}
-
-void UInventory::SpawnItemIcon(FVector2D ScreenPosition, int32 SlotIndex)
-{
-    if (!Items.IsValidIndex(SlotIndex) || !ForegroundBorders.IsValidIndex(SlotIndex))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Invalid item or border index %d"), SlotIndex);
-        return;
-    }
-
-    // Construct the overlay and image.
-    UOverlay* IconOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
-    UImage* ItemIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
     
-    if (Items[SlotIndex].IconTexture.IsValid())
-    {
-        ItemIcon->SetBrushFromTexture(Items[SlotIndex].IconTexture.Get());
-    }
-    else
-    {
-        ItemIcon->SetColorAndOpacity(FLinearColor::Blue); // Placeholder color
-    }
-
-    // Add the image to the overlay.
-    UOverlaySlot* ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
-    if (ImageSlot)
-    {
-        ImageSlot->SetHorizontalAlignment(HAlign_Fill);
-        ImageSlot->SetVerticalAlignment(VAlign_Fill);
-    }
-
-    // Create and add a text block for the item counter.
-    UTextBlock* ItemCounterText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-    if (ItemCounterText)
-    {
-        ItemCounterText->SetText(FText::AsNumber(ItemCounter));
-        ItemCounterText->SetColorAndOpacity(FLinearColor::Red);
-        ItemCounterText->SetJustification(ETextJustify::Center);
-        ItemCounterText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 20));
-
-        UOverlaySlot* TextOverlaySlot = IconOverlay->AddChildToOverlay(ItemCounterText);
-        if (TextOverlaySlot)
-        {
-            TextOverlaySlot->SetHorizontalAlignment(HAlign_Right);
-            TextOverlaySlot->SetVerticalAlignment(VAlign_Bottom);
-            TextOverlaySlot->SetPadding(FMargin(55, 50, 50, 65));
-        }
-    }
-
-    // Assign the constructed overlay to the correct border slot.
-    ForegroundBorders[SlotIndex]->SetContent(IconOverlay);
-    ForegroundBorders[SlotIndex]->SetVisibility(ESlateVisibility::Visible);
-
-    // Optionally, add the canvas panel slot for further manipulation.
-    if (UCanvasPanelSlot* PanelSlot = Cast<UCanvasPanelSlot>(ForegroundBorders[SlotIndex]->Slot))
-    {
-        IconSlots.Add(PanelSlot);
-    }
-
-    // If this was the last slot, mark inventory as full.
-    if (SlotIndex == Items.Num() - 1)
-    {
-        bIsInventoryFull = true;
-    }
-
     // Update the item counter for display (if used).
     ItemCounter = (ItemCounter % 12) + 1;
 }
 
-
-int64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
+uint64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
 {
     // Force layout on Grid to ensure geometry is updated.
     if (Grid)
@@ -327,7 +254,7 @@ int64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
         return INDEX_NONE;
     }
 
-    for (int32 i = 0; i < ForegroundBorders.Num(); i++)
+    for (uint64 i = 0; i < ForegroundBorders.Num(); i++)
     {
         if (!ForegroundBorders[i])
             continue;
@@ -352,7 +279,81 @@ int64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
     return INDEX_NONE;
 }
 
-UOverlay* UInventory::FindDraggedOverlay(int32 ItemIndex)
+void UInventory::CreateItemIcon(uint64 SlotIndex)
+{
+    if (!Items.IsValidIndex(SlotIndex) || !ForegroundBorders.IsValidIndex(SlotIndex))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Invalid item or border index %d"), SlotIndex);
+        return;
+    }
+
+     TObjectPtr<UOverlay> IconOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
+    if (!IconOverlay) return;
+
+     TObjectPtr<UImage> ItemIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+    if (!ItemIcon) return;
+
+    if (Items[SlotIndex].IconTexture.IsValid())
+    {
+        ItemIcon->SetBrushFromTexture(Items[SlotIndex].IconTexture.Get());
+    }
+    else
+    {
+        ItemIcon->SetColorAndOpacity(FLinearColor::Blue); // Placeholder color
+    }
+
+     TObjectPtr<UOverlaySlot> ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
+    if (ImageSlot)
+    {
+        ImageSlot->SetHorizontalAlignment(HAlign_Fill);
+        ImageSlot->SetVerticalAlignment(VAlign_Fill);
+    }
+
+    ForegroundBorders[SlotIndex]->SetContent(IconOverlay);
+    ForegroundBorders[SlotIndex]->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UInventory::CreateIconCounterText(uint64 SlotIndex)
+{
+    if (!ForegroundBorders.IsValidIndex(SlotIndex) || !ForegroundBorders[SlotIndex]->GetContent())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Invalid border or missing content at index %d"), SlotIndex);
+        return;
+    }
+
+    TObjectPtr<UOverlay> IconOverlay = Cast<UOverlay>(ForegroundBorders[SlotIndex]->GetContent());
+    if (!IconOverlay) return;
+
+    UTextBlock* ItemCounterText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+    if (!ItemCounterText) return;
+
+    ItemCounterText->SetText(FText::AsNumber(ItemCounter));
+    ItemCounterText->SetColorAndOpacity(FLinearColor::Red);
+    ItemCounterText->SetJustification(ETextJustify::Center);
+    ItemCounterText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 20));
+
+     TObjectPtr<UOverlaySlot> TextOverlaySlot = IconOverlay->AddChildToOverlay(ItemCounterText);
+    if (TextOverlaySlot)
+    {
+        TextOverlaySlot->SetHorizontalAlignment(HAlign_Right);
+        TextOverlaySlot->SetVerticalAlignment(VAlign_Bottom);
+        TextOverlaySlot->SetPadding(FMargin(55, 50, 50, 65));
+    }
+}
+
+uint64 UInventory::FindFirstEmptySlot() const
+{
+    for (uint64 i = 0; i < Items.Num(); i++)
+    {
+        if (!Items[i].ReferencedActorClass) // Slot is empty
+        {
+            return i;
+        }
+    }
+    return INDEX_NONE; // No empty slot found
+}
+
+TObjectPtr<UOverlay> UInventory::FindDraggedOverlay(uint64 ItemIndex)
 {
     if (!Canvas)
     {
@@ -361,16 +362,18 @@ UOverlay* UInventory::FindDraggedOverlay(int32 ItemIndex)
     }
 
     // Loop through all children of the canvas.
-    for (int32 i = 0; i < Canvas->GetChildrenCount(); i++)
+    for (uint64 i = 0; i < Canvas->GetChildrenCount(); i++)
     {
-        if (UOverlay* ChildOverlay = Cast<UOverlay>(Canvas->GetChildAt(i)))
+        TObjectPtr<UOverlay> ChildOverlay = Cast<UOverlay>(Canvas->GetChildAt(i));
+        if (ChildOverlay)
         {
             // Make sure there is at least one child before accessing index 0.
             if (ChildOverlay->GetChildrenCount() > 0)
             {
-                if (UImage* IconImage = Cast<UImage>(ChildOverlay->GetChildAt(0)))
+                TObjectPtr<UImage> IconImage = Cast<UImage>(ChildOverlay->GetChildAt(0));
+                if (IconImage)
                 {
-                    UTexture2D* Texture = Cast<UTexture2D>(IconImage->GetBrush().GetResourceObject());
+                    TObjectPtr<UTexture2D> Texture = Cast<UTexture2D>(IconImage->GetBrush().GetResourceObject());
                     if (Texture == Items[ItemIndex].IconTexture.Get())
                     {
                         return ChildOverlay;
@@ -392,12 +395,12 @@ UOverlay* UInventory::FindDraggedOverlay(int32 ItemIndex)
 
 void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove)
 {
-    int32 MovingIndex = DraggedItemIndex;
+    uint64 MovingIndex = DraggedItemIndex;
     FGeometry CanvasGeometry = Canvas->GetCachedGeometry();
 
     if (bStartMove && MovingIndex == INDEX_NONE)
     {
-        int32 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
+        uint64 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
         if (HoveredIndex == INDEX_NONE)
         {
             UE_LOG(LogTemp, Warning, TEXT("No hovered index found on drag start."));
@@ -415,13 +418,14 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
             {
                 Items[0].bIsSelected = true;
             }
-
             DraggedItemIndex = HoveredIndex;
             bIsDragging = true;
-
-            if (UBorder* Border = ForegroundBorders[HoveredIndex])
+            
+            TObjectPtr<UBorder> Border = ForegroundBorders[HoveredIndex];
+            if (Border)
             {
-                if (UOverlay* OverlayToDrag = Cast<UOverlay>(Border->GetContent()))
+                TObjectPtr<UOverlay> OverlayToDrag = Cast<UOverlay>(Border->GetContent());
+                if (OverlayToDrag)
                 {
                     Border->SetContent(nullptr);
                     Canvas->AddChild(OverlayToDrag);
@@ -450,12 +454,13 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
     }
     else if (!bStartMove && !bEndMove && MovingIndex != INDEX_NONE)
     {
-        UOverlay* OverlayToDrag = FindDraggedOverlay(MovingIndex);
+         TObjectPtr<UOverlay> OverlayToDrag = FindDraggedOverlay(MovingIndex);
         if (OverlayToDrag)
         {
             FVector2D ScreenPos = InMouseEvent.GetScreenSpacePosition();
             FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos);
-            if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
+            TObjectPtr<UCanvasPanelSlot> DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot);
+            if (DraggedSlot)
             {
                 LocalPos -= FVector2D(1.0f, 1.0f);
                 DraggedSlot->SetPosition(LocalPos);
@@ -469,13 +474,13 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
     }
     else if (bEndMove && MovingIndex != INDEX_NONE)
     {
-        int32 TargetIndex = FindHoveredItemIndex(InMouseEvent);
+        uint64 TargetIndex = FindHoveredItemIndex(InMouseEvent);
         UE_LOG(LogTemp, Log, TEXT("Drop detected. MovingIndex: %d, TargetIndex: %d"), MovingIndex, TargetIndex);
 
         if (TargetIndex != INDEX_NONE && ForegroundBorders.IsValidIndex(TargetIndex) && TargetIndex != MovingIndex)
         {
-            UOverlay* DraggedOverlay = FindDraggedOverlay(MovingIndex);
-            UOverlay* TargetOverlay = FindDraggedOverlay(TargetIndex);
+            TObjectPtr<UOverlay> DraggedOverlay = FindDraggedOverlay(MovingIndex);
+             TObjectPtr<UOverlay> TargetOverlay = FindDraggedOverlay(TargetIndex);
 
             if (!DraggedOverlay)
             {
@@ -505,7 +510,7 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
 
                 if (Items.IsValidIndex(MovingIndex) && Items.IsValidIndex(TargetIndex))
                 {
-                    Swap(Items[MovingIndex], Items[TargetIndex]);
+                    SortItem(Items[MovingIndex], Items[TargetIndex]);
                 }
                 else
                 {
@@ -522,7 +527,7 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
         else
         {
             // If target index is invalid, restore the dragged overlay to its original slot.
-            UOverlay* OverlayToRestore = FindDraggedOverlay(MovingIndex);
+            TObjectPtr<UOverlay> OverlayToRestore = FindDraggedOverlay(MovingIndex);
             if (OverlayToRestore && ForegroundBorders.IsValidIndex(MovingIndex))
             {
                 if (Canvas->HasChild(OverlayToRestore))
@@ -548,9 +553,56 @@ void UInventory::RemoveItem()
 {
 }
 
+EDirection UInventory::GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB)
+{
+    if (RowA == RowB)
+    {
+        if (ColB == ColA + 1) return EDirection::Right;
+        if (ColB == ColA - 1) return EDirection::Left;
+    }
+    else if (ColA == ColB)
+    {
+        if (RowB == RowA + 1) return EDirection::Down;
+        if (RowB == RowA - 1) return EDirection::Up;
+    }
+    
+    return static_cast<EDirection>(255); // Invalid move
+}
+
 void UInventory::SortItem(FItem MovedItem, FItem ItemToMove)
 {
+    int32 IndexA = Items.IndexOfByKey(MovedItem);
+    int32 IndexB = Items.IndexOfByKey(ItemToMove);
+
+    if (IndexA == INDEX_NONE || IndexB == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SortItem failed: Invalid item indices."));
+        return;
+    }
+
+    // Calculate row and column for each item based on MaxColumns
+    int32 RowA = IndexA / MaxColumns;
+    int32 ColA = IndexA % MaxColumns;
+    int32 RowB = IndexB / MaxColumns;
+    int32 ColB = IndexB % MaxColumns;
+
+    EDirection MoveDirection = GetMoveDirection(RowA, ColA, RowB, ColB);
+
+    if (MoveDirection == EDirection::Up || MoveDirection == EDirection::Down || MoveDirection == EDirection::Left || MoveDirection == EDirection::Right)
+    {
+        // Swap the items in the inventory list only
+        Swap(Items[IndexA], Items[IndexB]);
+
+        UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Invalid move detected. No sorting performed."));
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
 }
+
 
 void UInventory::Open()
 {
@@ -562,7 +614,7 @@ void UInventory::Close()
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
-bool UInventory::GetIsInventoryFull()
+bool UInventory::GetIsInventoryFull() const
 {
 	return bIsInventoryFull;
 }

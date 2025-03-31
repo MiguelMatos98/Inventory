@@ -90,7 +90,5 @@ public:
 	void OnToggle();
 
 	void OnClick(const FInputActionValue& Value);
-
-	void OnDrag();
 };
 
