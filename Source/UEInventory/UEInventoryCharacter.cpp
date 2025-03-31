@@ -310,7 +310,3 @@ void AUEInventoryCharacter::OnClick(const FInputActionValue& Value)
         UE_LOG(LogTemp, Warning, TEXT("Inventory is full"));
     }
 }
-
-void AUEInventoryCharacter::OnDrag()
-{
-}
