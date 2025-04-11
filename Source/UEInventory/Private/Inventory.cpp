@@ -208,7 +208,6 @@ void UInventory::AddItem(AActor* ItemActor)
     // Create the UI icon and counter for this slot.
     CreateItemIcon(EmptySlotIndex);
     CreateIconCounterText(EmptySlotIndex);
-    CreateIconCounterText(EmptySlotIndex);
 
     ItemActor->Destroy();
 
@@ -302,7 +301,7 @@ void UInventory::CreateItemIcon(uint64 SlotIndex)
         ItemIcon->SetColorAndOpacity(FLinearColor::Blue); // Placeholder color
     }
 
-     TObjectPtr<UOverlaySlot> ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
+    TObjectPtr<UOverlaySlot> ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
     if (ImageSlot)
     {
         ImageSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -393,14 +392,14 @@ TObjectPtr<UOverlay> UInventory::FindDraggedOverlay(uint64 ItemIndex)
     return nullptr;
 }
 
-void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove)
+void UInventory::MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished)
 {
     uint64 MovingIndex = DraggedItemIndex;
     FGeometry CanvasGeometry = Canvas->GetCachedGeometry();
 
-    if (bStartMove && MovingIndex == INDEX_NONE)
+    if (bItemMovementStarted && MovingIndex == INDEX_NONE)
     {
-        uint64 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
+        uint64 HoveredIndex = FindHoveredItemIndex(MouseEvent);
         if (HoveredIndex == INDEX_NONE)
         {
             UE_LOG(LogTemp, Warning, TEXT("No hovered index found on drag start."));
@@ -435,9 +434,20 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
                         DraggedSlot->SetSize(FVector2D(100.0f, 100.0f));
                         DraggedSlot->SetZOrder(100);
 
-                        FVector2D ScreenPos = InMouseEvent.GetScreenSpacePosition();
+                        FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
                         FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos) - FVector2D(1.0f, 1.0f);
-                        DraggedSlot->SetPosition(LocalPos);
+                       
+                        // Get the desired size of the widget so we can compute an appropriate offset.
+                        FVector2D WidgetSize = OverlayToDrag->GetDesiredSize();
+
+                        // Use the same custom center offset as used in MoveItem.
+                        // In this case: 40% of the widget's width and 30% of the widget's height.
+                        FVector2D CenterOffset = FVector2D(WidgetSize.X * 0.4f, WidgetSize.Y * 0.3f);
+
+                        // Subtract the center offset from the current local mouse position.
+                        FVector2D CenteredPos = LocalPos - CenterOffset;
+                        
+                        DraggedSlot->SetPosition(CenteredPos);
                     }
                 }
                 else
@@ -452,18 +462,20 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
             UE_LOG(LogTemp, Warning, TEXT("Cannot start drag at index %d: invalid index or no content."), HoveredIndex);
         }
     }
-    else if (!bStartMove && !bEndMove && MovingIndex != INDEX_NONE)
+    else if (!bItemMovementStarted && !bItemMovementFinished && MovingIndex != INDEX_NONE)
     {
          TObjectPtr<UOverlay> OverlayToDrag = FindDraggedOverlay(MovingIndex);
         if (OverlayToDrag)
         {
-            FVector2D ScreenPos = InMouseEvent.GetScreenSpacePosition();
+            FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
             FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos);
             TObjectPtr<UCanvasPanelSlot> DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot);
             if (DraggedSlot)
             {
-                LocalPos -= FVector2D(1.0f, 1.0f);
-                DraggedSlot->SetPosition(LocalPos);
+                FVector2D WidgetSize = OverlayToDrag->GetDesiredSize();
+                FVector2D CenterOffset = FVector2D(WidgetSize.X * 0.4f, WidgetSize.Y * 0.3f);
+                FVector2D CenteredPos = LocalPos - CenterOffset;
+                DraggedSlot->SetPosition(CenteredPos);
                 UE_LOG(LogTemp, Log, TEXT("Dragging item from slot %d to X=%f, Y=%f"), MovingIndex, LocalPos.X, LocalPos.Y);
             }
         }
@@ -472,9 +484,9 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
             UE_LOG(LogTemp, Warning, TEXT("Dragged overlay not found during drag update for slot %d"), MovingIndex);
         }
     }
-    else if (bEndMove && MovingIndex != INDEX_NONE)
+    else if (bItemMovementFinished && MovingIndex != INDEX_NONE)
     {
-        uint64 TargetIndex = FindHoveredItemIndex(InMouseEvent);
+        uint64 TargetIndex = FindHoveredItemIndex(MouseEvent);
         UE_LOG(LogTemp, Log, TEXT("Drop detected. MovingIndex: %d, TargetIndex: %d"), MovingIndex, TargetIndex);
 
         if (TargetIndex != INDEX_NONE && ForegroundBorders.IsValidIndex(TargetIndex) && TargetIndex != MovingIndex)
@@ -510,7 +522,8 @@ void UInventory::MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bo
 
                 if (Items.IsValidIndex(MovingIndex) && Items.IsValidIndex(TargetIndex))
                 {
-                    SortItem(Items[MovingIndex], Items[TargetIndex]);
+                   // SortItem(Items[MovingIndex], Items[TargetIndex]);
+                    UE_LOG(LogTemp, Warning, TEXT("Item sorted"));
                 }
                 else
                 {
@@ -569,39 +582,39 @@ EDirection UInventory::GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, u
     return static_cast<EDirection>(255); // Invalid move
 }
 
-void UInventory::SortItem(FItem MovedItem, FItem ItemToMove)
-{
-    int32 IndexA = Items.IndexOfByKey(MovedItem);
-    int32 IndexB = Items.IndexOfByKey(ItemToMove);
-
-    if (IndexA == INDEX_NONE || IndexB == INDEX_NONE)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("SortItem failed: Invalid item indices."));
-        return;
-    }
-
-    // Calculate row and column for each item based on MaxColumns
-    int32 RowA = IndexA / MaxColumns;
-    int32 ColA = IndexA % MaxColumns;
-    int32 RowB = IndexB / MaxColumns;
-    int32 ColB = IndexB % MaxColumns;
-
-    EDirection MoveDirection = GetMoveDirection(RowA, ColA, RowB, ColB);
-
-    if (MoveDirection == EDirection::Up || MoveDirection == EDirection::Down || MoveDirection == EDirection::Left || MoveDirection == EDirection::Right)
-    {
-        // Swap the items in the inventory list only
-        Swap(Items[IndexA], Items[IndexB]);
-
-        UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Invalid move detected. No sorting performed."));
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
-}
+//void UInventory::SortItem(FItem MovedItem, FItem ItemToMove)
+//{
+//    int32 IndexA = Items.IndexOfByKey(MovedItem);
+//    int32 IndexB = Items.IndexOfByKey(ItemToMove);
+//
+//    if (IndexA == INDEX_NONE || IndexB == INDEX_NONE)
+//    {
+//        UE_LOG(LogTemp, Warning, TEXT("SortItem failed: Invalid item indices."));
+//        return;
+//    }
+//
+//    // Calculate row and column for each item based on MaxColumns
+//    int32 RowA = IndexA / MaxColumns;
+//    int32 ColA = IndexA % MaxColumns;
+//    int32 RowB = IndexB / MaxColumns;
+//    int32 ColB = IndexB % MaxColumns;
+//
+//    EDirection MoveDirection = GetMoveDirection(RowA, ColA, RowB, ColB);
+//
+//    if (MoveDirection == EDirection::Up || MoveDirection == EDirection::Down || MoveDirection == EDirection::Left || MoveDirection == EDirection::Right)
+//    {
+//        // Swap the items in the inventory list only
+//        Swap(Items[IndexA], Items[IndexB]);
+//
+//        UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
+//    }
+//    else
+//    {
+//        UE_LOG(LogTemp, Warning, TEXT("Invalid move detected. No sorting performed."));
+//    }
+//
+//    UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
+//}
 
 
 void UInventory::Open()
