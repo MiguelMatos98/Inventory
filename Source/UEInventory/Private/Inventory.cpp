@@ -154,21 +154,18 @@ FReply UInventory::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FP
 {
     if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
     {
-        MoveItem(InMouseEvent, true, false);
-        if (bIsDragging)
-        {
-            UE_LOG(LogTemp, Log, TEXT("Started dragging item."));
-            return FReply::Handled().CaptureMouse(TakeWidget());
-        }
+        StartItemDrag();  // Start the drag without passing the mouse event
+        UE_LOG(LogTemp, Log, TEXT("Started dragging item."));
+        return FReply::Handled().CaptureMouse(TakeWidget());
     }
     return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 FReply UInventory::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-    if (bIsDragging && DraggedItemIndex != INDEX_NONE)
+    if (InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
     {
-        MoveItem(InMouseEvent, false, false);
+        UpdateItemDrag();  // Update item position while dragging
         return FReply::Handled();
     }
     return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
@@ -176,9 +173,9 @@ FReply UInventory::NativeOnMouseMove(const FGeometry& InGeometry, const FPointer
 
 FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-    if (bIsDragging && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+    if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
     {
-        MoveItem(InMouseEvent, false, true);
+        FinishItemDrag();  // Finish the drag
         return FReply::Handled().ReleaseMouseCapture();
     }
     return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
@@ -221,15 +218,14 @@ void UInventory::AddItem(AActor* ItemActor)
     ItemCounter = (ItemCounter % 12) + 1;
 }
 
-uint64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
+void UInventory::RemoveItem()
 {
-    // Force layout on Grid to ensure geometry is updated.
-    if (Grid)
-    {
-        Grid->ForceLayoutPrepass();
-    }
+}
 
-    FVector2D MousePos = InMouseEvent.GetScreenSpacePosition();
+uint64 UInventory::FindHoveredItemIndex()
+{
+    // Get the current mouse position from FSlateApplication
+    FVector2D MousePos = FSlateApplication::Get().GetCursorPos();
     UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport): X=%f, Y=%f"), MousePos.X, MousePos.Y);
 
     if (!Grid || ForegroundBorders.Num() == 0)
@@ -243,7 +239,7 @@ uint64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
     FVector2D GridAbsSize = GridGeometry.GetLocalSize();
     FVector2D GridAbsBottomRight = GridAbsTopLeft + GridAbsSize;
     UE_LOG(LogTemp, Log, TEXT("Grid TopLeft: X=%f, Y=%f, Size: X=%f, Y=%f"),
-           GridAbsTopLeft.X, GridAbsTopLeft.Y, GridAbsSize.X, GridAbsSize.Y);
+        GridAbsTopLeft.X, GridAbsTopLeft.Y, GridAbsSize.X, GridAbsSize.Y);
 
     const float Tolerance = 10.f;
     if (MousePos.X < GridAbsTopLeft.X - Tolerance || MousePos.X > GridAbsBottomRight.X + Tolerance ||
@@ -264,7 +260,7 @@ uint64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
         FVector2D BorderAbsBottomRight = BorderAbsTopLeft + BorderAbsSize;
 
         UE_LOG(LogTemp, Log, TEXT("Border[%d] - TopLeft: X=%f, Y=%f; BottomRight: X=%f, Y=%f"),
-               i, BorderAbsTopLeft.X, BorderAbsTopLeft.Y, BorderAbsBottomRight.X, BorderAbsBottomRight.Y);
+            i, BorderAbsTopLeft.X, BorderAbsTopLeft.Y, BorderAbsBottomRight.X, BorderAbsBottomRight.Y);
 
         if (MousePos.X >= BorderAbsTopLeft.X - Tolerance && MousePos.X <= BorderAbsBottomRight.X + Tolerance &&
             MousePos.Y >= BorderAbsTopLeft.Y - Tolerance && MousePos.Y <= BorderAbsBottomRight.Y + Tolerance)
@@ -276,6 +272,7 @@ uint64 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent)
 
     UE_LOG(LogTemp, Warning, TEXT("No hovered index found."));
     return INDEX_NONE;
+
 }
 
 void UInventory::CreateItemIcon(uint64 SlotIndex)
@@ -392,178 +389,101 @@ TObjectPtr<UOverlay> UInventory::FindDraggedOverlay(uint64 ItemIndex)
     return nullptr;
 }
 
-void UInventory::MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished)
+void UInventory::StartItemDrag()
 {
-    uint64 MovingIndex = DraggedItemIndex;
+    if (HoveredIndex == INDEX_NONE || !Items.IsValidIndex(HoveredIndex))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Invalid item index detected during drag start."));
+        return;
+    }
+
+    TObjectPtr<UBorder> Border = ForegroundBorders[HoveredIndex];
+    TObjectPtr<UOverlay> OverlayToDrag = Cast<UOverlay>(Border->GetContent());
+
+    if (!OverlayToDrag)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No overlay found at hovered index %d"), HoveredIndex);
+        return;
+    }
+
+    // Remove the item from the grid and add it to the canvas for dragging
+    Border->SetContent(nullptr);
+    Canvas->AddChild(OverlayToDrag);
+
+    // Get the mouse position directly
+    FVector2D ScreenPos;
+    APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+    if (PlayerController)
+    {
+        PlayerController->GetMousePosition(ScreenPos.X, ScreenPos.Y);
+    }
+
     FGeometry CanvasGeometry = Canvas->GetCachedGeometry();
+    FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos);
 
-    if (bItemMovementStarted && MovingIndex == INDEX_NONE)
+    // Adjust for the center of the widget
+    if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
     {
-        uint64 HoveredIndex = FindHoveredItemIndex(MouseEvent);
-        if (HoveredIndex == INDEX_NONE)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("No hovered index found on drag start."));
-            return;
-        }
-
-        if (ForegroundBorders.IsValidIndex(HoveredIndex) && ForegroundBorders[HoveredIndex]->GetContent())
-        {
-            // Deselect all items; then (for this example) select the first item.
-            for (FItem& Item : Items)
-            {
-                Item.bIsSelected = false;
-            }
-            if (Items.Num() > 0)
-            {
-                Items[0].bIsSelected = true;
-            }
-            DraggedItemIndex = HoveredIndex;
-            bIsDragging = true;
-            
-            TObjectPtr<UBorder> Border = ForegroundBorders[HoveredIndex];
-            if (Border)
-            {
-                TObjectPtr<UOverlay> OverlayToDrag = Cast<UOverlay>(Border->GetContent());
-                if (OverlayToDrag)
-                {
-                    Border->SetContent(nullptr);
-                    Canvas->AddChild(OverlayToDrag);
-
-                    if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
-                    {
-                        DraggedSlot->SetSize(FVector2D(100.0f, 100.0f));
-                        DraggedSlot->SetZOrder(100);
-
-                        FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
-                        FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos) - FVector2D(1.0f, 1.0f);
-                       
-                        // Get the desired size of the widget so we can compute an appropriate offset.
-                        FVector2D WidgetSize = OverlayToDrag->GetDesiredSize();
-
-                        // Use the same custom center offset as used in MoveItem.
-                        // In this case: 40% of the widget's width and 30% of the widget's height.
-                        FVector2D CenterOffset = FVector2D(WidgetSize.X * 0.4f, WidgetSize.Y * 0.3f);
-
-                        // Subtract the center offset from the current local mouse position.
-                        FVector2D CenteredPos = LocalPos - CenterOffset;
-                        
-                        DraggedSlot->SetPosition(CenteredPos);
-                    }
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("OverlayToDrag not found at hovered index %d"), HoveredIndex);
-                }
-            }
-            UE_LOG(LogTemp, Log, TEXT("Started moving item from slot %d"), HoveredIndex);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Cannot start drag at index %d: invalid index or no content."), HoveredIndex);
-        }
-    }
-    else if (!bItemMovementStarted && !bItemMovementFinished && MovingIndex != INDEX_NONE)
-    {
-         TObjectPtr<UOverlay> OverlayToDrag = FindDraggedOverlay(MovingIndex);
-        if (OverlayToDrag)
-        {
-            FVector2D ScreenPos = MouseEvent.GetScreenSpacePosition();
-            FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos);
-            TObjectPtr<UCanvasPanelSlot> DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot);
-            if (DraggedSlot)
-            {
-                FVector2D WidgetSize = OverlayToDrag->GetDesiredSize();
-                FVector2D CenterOffset = FVector2D(WidgetSize.X * 0.4f, WidgetSize.Y * 0.3f);
-                FVector2D CenteredPos = LocalPos - CenterOffset;
-                DraggedSlot->SetPosition(CenteredPos);
-                UE_LOG(LogTemp, Log, TEXT("Dragging item from slot %d to X=%f, Y=%f"), MovingIndex, LocalPos.X, LocalPos.Y);
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("Dragged overlay not found during drag update for slot %d"), MovingIndex);
-        }
-    }
-    else if (bItemMovementFinished && MovingIndex != INDEX_NONE)
-    {
-        uint64 TargetIndex = FindHoveredItemIndex(MouseEvent);
-        UE_LOG(LogTemp, Log, TEXT("Drop detected. MovingIndex: %d, TargetIndex: %d"), MovingIndex, TargetIndex);
-
-        if (TargetIndex != INDEX_NONE && ForegroundBorders.IsValidIndex(TargetIndex) && TargetIndex != MovingIndex)
-        {
-            TObjectPtr<UOverlay> DraggedOverlay = FindDraggedOverlay(MovingIndex);
-             TObjectPtr<UOverlay> TargetOverlay = FindDraggedOverlay(TargetIndex);
-
-            if (!DraggedOverlay)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Dragged overlay not found during drop for slot %d"), MovingIndex);
-                bIsDragging = false;
-                DraggedItemIndex = INDEX_NONE;
-                return;
-            }
-
-            // Remove the dragged overlay from canvas if still present.
-            if (Canvas->HasChild(DraggedOverlay))
-            {
-                Canvas->RemoveChild(DraggedOverlay);
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Canvas does not contain dragged overlay for slot %d"), MovingIndex);
-            }
-
-            if (ForegroundBorders.IsValidIndex(MovingIndex) && ForegroundBorders.IsValidIndex(TargetIndex))
-            {
-                // Swap UI: if TargetOverlay is null, clear that slot.
-                ForegroundBorders[MovingIndex]->SetContent(TargetOverlay ? TargetOverlay : nullptr);
-                ForegroundBorders[TargetIndex]->SetContent(DraggedOverlay);
-                ForegroundBorders[MovingIndex]->SetVisibility(ESlateVisibility::Visible);
-                ForegroundBorders[TargetIndex]->SetVisibility(ESlateVisibility::Visible);
-
-                if (Items.IsValidIndex(MovingIndex) && Items.IsValidIndex(TargetIndex))
-                {
-                   // SortItem(Items[MovingIndex], Items[TargetIndex]);
-                    UE_LOG(LogTemp, Warning, TEXT("Item sorted"));
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("Invalid inventory indices for swap: %d, %d"), MovingIndex, TargetIndex);
-                }
-                UE_LOG(LogTemp, Log, TEXT("Swapped item from slot %d to slot %d"), MovingIndex, TargetIndex);
-                ForegroundBorders[TargetIndex]->InvalidateLayoutAndVolatility();
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Invalid ForegroundBorders indices during drop: %d, %d"), MovingIndex, TargetIndex);
-            }
-        }
-        else
-        {
-            // If target index is invalid, restore the dragged overlay to its original slot.
-            TObjectPtr<UOverlay> OverlayToRestore = FindDraggedOverlay(MovingIndex);
-            if (OverlayToRestore && ForegroundBorders.IsValidIndex(MovingIndex))
-            {
-                if (Canvas->HasChild(OverlayToRestore))
-                {
-                    Canvas->RemoveChild(OverlayToRestore);
-                }
-                ForegroundBorders[MovingIndex]->SetContent(OverlayToRestore);
-                ForegroundBorders[MovingIndex]->SetVisibility(ESlateVisibility::Visible);
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Unable to restore overlay for slot %d"), MovingIndex);
-            }
-            UE_LOG(LogTemp, Log, TEXT("Drag canceled or invalid target slot; restored original slot."));
-        }
-        // Reset drag state.
-        bIsDragging = false;
-        DraggedItemIndex = INDEX_NONE;
+        FVector2D WidgetSize = OverlayToDrag->GetDesiredSize();
+        FVector2D CenteredPos = LocalPos - FVector2D(WidgetSize.X * 0.4f, WidgetSize.Y * 0.3f);
+        DraggedSlot->SetPosition(CenteredPos);
     }
 }
 
-void UInventory::RemoveItem()
+void UInventory::UpdateItemDrag()
 {
+    TObjectPtr<UOverlay> OverlayToDrag = FindDraggedOverlay();
+
+    if (!OverlayToDrag)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Dragged overlay not found during drag update for index %d"), HoveredIndex);
+        return;
+    }
+
+    // Get the mouse position directly
+    FVector2D ScreenPos;
+    APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+    if (PlayerController)
+    {
+        PlayerController->GetMousePosition(ScreenPos.X, ScreenPos.Y);
+    }
+
+    FGeometry CanvasGeometry = Canvas->GetCachedGeometry();
+    FVector2D LocalPos = CanvasGeometry.AbsoluteToLocal(ScreenPos);
+
+    // Adjust for the center of the widget
+    if (UCanvasPanelSlot* DraggedSlot = Cast<UCanvasPanelSlot>(OverlayToDrag->Slot))
+    {
+        FVector2D WidgetSize = OverlayToDrag->GetDesiredSize();
+        FVector2D CenteredPos = LocalPos - FVector2D(WidgetSize.X * 0.4f, WidgetSize.Y * 0.3f);
+        DraggedSlot->SetPosition(CenteredPos);
+    }
+}
+
+void UInventory::FinishItemDrag()
+{
+    uint64 TargetIndex = FindHoveredItemIndex();
+
+    if (TargetIndex == INDEX_NONE || TargetIndex == HoveredIndex)
+    {
+        // If the target index is invalid or the item is dropped on the same slot, no need to do anything
+        return;
+    }
+
+    // Get the overlays of both items
+    TObjectPtr<UOverlay> DraggedOverlay = FindDraggedOverlay(HoveredIndex);
+    TObjectPtr<UOverlay> TargetOverlay = ForegroundBorders[TargetIndex]->GetContent() ? Cast<UOverlay>(ForegroundBorders[TargetIndex]->GetContent()) : nullptr;
+
+    // Swap the overlays
+    ForegroundBorders[HoveredIndex]->SetContent(TargetOverlay);
+    ForegroundBorders[TargetIndex]->SetContent(DraggedOverlay);
+
+    // Update visibility based on whether each slot has content
+    ForegroundBorders[HoveredIndex]->SetVisibility(TargetOverlay ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+    ForegroundBorders[TargetIndex]->SetVisibility(ESlateVisibility::Visible);
+
+    // Optionally update logical state here, like item sorting
+    SortItem(Items[HoveredIndex], Items[TargetIndex]);
 }
 
 EDirection UInventory::GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB)
@@ -578,44 +498,65 @@ EDirection UInventory::GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, u
         if (RowB == RowA + 1) return EDirection::Down;
         if (RowB == RowA - 1) return EDirection::Up;
     }
-    
-    return static_cast<EDirection>(255); // Invalid move
+    return static_cast<EDirection>(255);
 }
 
-//void UInventory::SortItem(FItem MovedItem, FItem ItemToMove)
-//{
-//    int32 IndexA = Items.IndexOfByKey(MovedItem);
-//    int32 IndexB = Items.IndexOfByKey(ItemToMove);
-//
-//    if (IndexA == INDEX_NONE || IndexB == INDEX_NONE)
-//    {
-//        UE_LOG(LogTemp, Warning, TEXT("SortItem failed: Invalid item indices."));
-//        return;
-//    }
-//
-//    // Calculate row and column for each item based on MaxColumns
-//    int32 RowA = IndexA / MaxColumns;
-//    int32 ColA = IndexA % MaxColumns;
-//    int32 RowB = IndexB / MaxColumns;
-//    int32 ColB = IndexB % MaxColumns;
-//
-//    EDirection MoveDirection = GetMoveDirection(RowA, ColA, RowB, ColB);
-//
-//    if (MoveDirection == EDirection::Up || MoveDirection == EDirection::Down || MoveDirection == EDirection::Left || MoveDirection == EDirection::Right)
-//    {
-//        // Swap the items in the inventory list only
-//        Swap(Items[IndexA], Items[IndexB]);
-//
-//        UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
-//    }
-//    else
-//    {
-//        UE_LOG(LogTemp, Warning, TEXT("Invalid move detected. No sorting performed."));
-//    }
-//
-//    UE_LOG(LogTemp, Log, TEXT("Sorted item from (%d, %d) to (%d, %d)"), RowA, ColA, RowB, ColB);
-//}
+void UInventory::SortItem(FItem& MovedItem, FItem& ItemToMove)
+{
+    int32 IndexA = FindItemIndex(MovedItem);
+    int32 IndexB = FindItemIndex(ItemToMove);
 
+    // Check if indices are valid before proceeding
+    if (IndexA == INDEX_NONE || IndexB == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SortItem failed: Invalid item indices - IndexA: %d, IndexB: %d"), IndexA, IndexB);
+        return; // Skip returning a direction if indices are invalid
+    }
+
+    // Calculate row and column positions
+    int32 RowA = IndexA / MaxColumns;
+    int32 ColA = IndexA % MaxColumns;
+    int32 RowB = IndexB / MaxColumns;
+    int32 ColB = IndexB % MaxColumns;
+
+    // Swap the items logically
+    Items.Swap(IndexA, IndexB);
+
+    // Ensure we only update visuals if the indices are valid
+    if (ForegroundBorders.IsValidIndex(IndexA) && ForegroundBorders.IsValidIndex(IndexB))
+    {
+        if (UUniformGridSlot* SlotA = Cast<UUniformGridSlot>(ForegroundBorders[IndexA]->Slot))
+        {
+            SlotA->SetRow(RowB);
+            SlotA->SetColumn(ColB);
+        }
+
+        if (UUniformGridSlot* SlotB = Cast<UUniformGridSlot>(ForegroundBorders[IndexB]->Slot))
+        {
+            SlotB->SetRow(RowA);
+            SlotB->SetColumn(ColA);
+        }
+    }
+
+    // Update icons and counters
+    CreateItemIcon(IndexA);
+    CreateItemIcon(IndexB);
+    CreateIconCounterText(IndexA);
+    CreateIconCounterText(IndexB);
+}
+
+int32 UInventory::FindItemIndex(const FItem& TargetItem) const
+{
+    for (int32 i = 0; i < Items.Num(); ++i)
+    {
+        if (Items[i].ReferencedActorClass == TargetItem.ReferencedActorClass &&
+            Items[i].WorldLocation == TargetItem.WorldLocation)
+        {
+            return i;
+        }
+    }
+    return INDEX_NONE;
+}
 
 void UInventory::Open()
 {
