@@ -92,9 +92,8 @@ public:
 	static constexpr uint64  MaxColumns = 4;
 	static constexpr uint64  MaxRows = 3;
 
-	
 	UFUNCTION()
-	uint64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
+	uint64 FindHoveredItemIndex();
 
 	UFUNCTION()
 	void CreateItemIcon(uint64 SlotIndex);
@@ -120,10 +119,19 @@ public:
 	EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
 
 	UFUNCTION()
-	void MoveItem(const FPointerEvent& InMouseEvent, bool bStartMove, bool bEndMove);
+	void StartItemDrag();
 
 	UFUNCTION()
-	void SortItem(FItem MovedItem, FItem ItemToMove);
+	void UpdateItemDrag();
+
+	UFUNCTION()
+	void FinishItemDrag();
+
+	UFUNCTION()
+	void SortItem(FItem& MovedItem, FItem& ItemToMove);
+
+	UFUNCTION()
+	int32 FindItemIndex(const FItem& TargetItem) const;
 
 	UFUNCTION()
 	void Open();
