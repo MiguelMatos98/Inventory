@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -13,139 +11,165 @@ class UUniformGridSlot;
 class UTextBlock;
 class UOverlay;
 class UBorder;
+class USizeBox;
+class UVerticalBox; // Added for ContentBox
+class UVerticalBoxSlot; // Added for TitleBoxSlot and GridBoxSlot
 class FReply;
 struct FItem;
 
 UENUM(BlueprintType)
 enum class EDirection : uint8
 {
-	Up UMETA(DisplayName = "Up"),
-	Down UMETA(DisplayName = "Down"),
-	Left UMETA(DisplayName = "Left"),
-	Right UMETA(DisplayName = "Right")
+    Up UMETA(DisplayName = "Up"),
+    Down UMETA(DisplayName = "Down"),
+    Left UMETA(DisplayName = "Left"),
+    Right UMETA(DisplayName = "Right")
 };
 
 UCLASS()
 class UEINVENTORY_API UInventory : public UUserWidget
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 private:
-	
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UCanvasPanel> Canvas;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UCanvasPanel> Canvas;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UCanvasPanelSlot> CanvasSlot;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UCanvasPanelSlot> CanvasSlot;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UUniformGridSlot> GridSlot;
-	
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UUniformGridPanel> Grid;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UUniformGridSlot> GridSlot;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UCanvasPanelSlot> TitleSlot;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UUniformGridPanel> Grid;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UTextBlock> Title;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UCanvasPanelSlot> TitleSlot;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TArray<TObjectPtr<UBorder>> ForegroundBorders;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UTextBlock> Title;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UBorder> BackgroundBorder;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TArray<TObjectPtr<UBorder>> ForegroundBorders;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TObjectPtr<UCanvasPanelSlot>  BackgroundBorderSlot;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UBorder> BackgroundBorder;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TArray<TObjectPtr<UCanvasPanelSlot>> IconSlots;
-	
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	TArray<FItem> Items;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UCanvasPanelSlot> BackgroundBorderSlot;
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	bool bIsInventoryFull;
-	
-	static uint64 ItemCounter;
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TArray<TObjectPtr<UCanvasPanelSlot>> IconSlots;
 
-	// Drag state variables
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	bool bIsDragging;
-    
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	int32 DraggedItemIndex;
-    
-	
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TArray<FItem> Items;
+
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    bool bIsInventoryFull;
+
+    static uint64 ItemCounter;
+
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    int32 DraggedItemIndex;
+
+    UPROPERTY(EditAnywhere, Category = "Inventory|Animations", meta = (BindWidgetAnim))
+    UWidgetAnimation* SlideSwap;
+
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TObjectPtr<UOverlay> DraggedOverlay;
+
+    UPROPERTY(VisibleAnywhere, Category = "Inventory")
+    TArray<bool> bCounterTextUpdated;
+
+
 protected:
 
-	virtual void NativeOnInitialized() override;
+    virtual void NativeOnInitialized() override;
 
-	// Override native mouse events:
-	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	
+    virtual void NativeConstruct() override;
+
+    // Override native mouse events
+    virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+    virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+    virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
 public:
 
-	static constexpr uint64  MaxColumns = 4;
-	static constexpr uint64  MaxRows = 3;
+    static constexpr uint64 MaxColumns = 4;
+    static constexpr uint64 MaxRows = 3;
 
-	UFUNCTION()
-	uint64 FindHoveredItemIndex();
+    UFUNCTION()
+    uint64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
 
-	UFUNCTION()
-	void CreateItemIcon(uint64 SlotIndex);
+    UFUNCTION()
+    void CreateItemIcon(uint64 SlotIndex);
 
-	UFUNCTION()
-	void CreateIconCounterText(uint64 SlotIndex);
-	
-	UFUNCTION()
-	uint64 FindFirstEmptySlot() const;
+    UFUNCTION()
+    void CreateIconCounterText(uint64 SlotIndex);
 
-	TObjectPtr<UOverlay> FindDraggedOverlay(uint64 ItemIndex);
+    UFUNCTION()
+    uint64 FindFirstEmptySlot() const;
 
-	UFUNCTION()
-	void Create(uint64 Rows, uint64 Columns);
+    TObjectPtr<UOverlay> FindDraggedOverlay(uint64 ItemIndex);
 
-	UFUNCTION()
-	void AddItem(AActor* ItemActor);
+    UFUNCTION()
+    void Create();
 
-	UFUNCTION()
-	void RemoveItem();
+    UFUNCTION()
+    void AddItem(AActor* ItemActor);
 
-	UFUNCTION()
-	EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
+    UFUNCTION()
+    void RemoveItem();
 
-	UFUNCTION()
-	void StartItemDrag();
+    UFUNCTION()
+    EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
 
-	UFUNCTION()
-	void UpdateItemDrag();
+    UFUNCTION()
+    void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
 
-	UFUNCTION()
-	void FinishItemDrag();
+    UFUNCTION()
+    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
 
-	UFUNCTION()
-	void SortItem(FItem& MovedItem, FItem& ItemToMove);
+    UFUNCTION()
+    int32 FindItemIndex(const FItem& TargetItem) const;
 
-	UFUNCTION()
-	int32 FindItemIndex(const FItem& TargetItem) const;
+    UFUNCTION()
+    void Open();
 
-	UFUNCTION()
-	void Open();
+    UFUNCTION()
+    void Close();
 
-	UFUNCTION()
-	void Close();
+    UFUNCTION()
+    bool GetIsInventoryFull() const;
 
-	UFUNCTION()
-	bool GetIsInventoryFull() const;
-	
-	UFUNCTION()
-	TArray<FItem>& GetItems();
+    UFUNCTION()
+    TArray<FItem>& GetItems();
 
-	TArray<TObjectPtr<UBorder>> GetForegroundBorders();
+    TArray<TObjectPtr<UBorder>> GetForegroundBorders();
 
-	TObjectPtr<UUniformGridPanel> GetGrid();
+    TObjectPtr<UUniformGridPanel> GetGrid();
+
+    struct FItemSlideAnimation
+    {
+        TObjectPtr<UOverlay> WidgetA;
+        TObjectPtr<UOverlay> WidgetB;
+        FVector2D StartPosA;
+        FVector2D StartPosB;
+        FVector2D EndPosA;
+        FVector2D EndPosB;
+        int32 IndexA;
+        int32 IndexB;
+        float ElapsedTime;
+
+        FItemSlideAnimation()
+            : WidgetA(nullptr), WidgetB(nullptr), StartPosA(FVector2D::ZeroVector), StartPosB(FVector2D::ZeroVector),
+            EndPosA(FVector2D::ZeroVector), EndPosB(FVector2D::ZeroVector), IndexA(0), IndexB(0), ElapsedTime(0.0f)
+        {
+        }
+    };
+    FItemSlideAnimation CurrentSlideData;
+
+    UFUNCTION()
+    void UpdateSlideTick();
 };
