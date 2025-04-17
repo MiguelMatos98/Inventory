@@ -75,9 +75,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     UUniformGridPanel* GetGrid();
-
     uint64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
     void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
+
 protected:
     uint64 MaxRows = 3;
 
