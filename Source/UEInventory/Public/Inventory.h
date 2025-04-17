@@ -23,6 +23,7 @@
 #include "Misc/Paths.h"
 #include "Engine/Texture2D.h"
 #include "Components/SizeBox.h"
+#include "Engine/GameViewportClient.h"
 #include "Item.h"
 #include "Inventory.generated.h"
 
@@ -44,18 +45,13 @@ class UInventory : public UUserWidget
 public:
     UInventory(const FObjectInitializer& ObjectInitializer);
 
-    static uint64 ItemCounter;
-
-protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeConstruct() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-    virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-    virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+    virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void AddItem(AActor* ItemActor);
 
@@ -80,33 +76,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     UUniformGridPanel* GetGrid();
 
-    void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
     uint64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
-
+    void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
 protected:
-    void CreateItemIcon(uint64 SlotIndex);
-    void CreateIconCounterText(uint64 SlotIndex);
-    uint64 FindFirstEmptySlot() const;
-    UOverlay* FindDraggedOverlay(uint64 ItemIndex);
-    UOverlay* CreateTemporaryDragOverlay(const FItem& Item);
-    EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
-    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
-    int32 FindItemIndex(const FItem& TargetItem) const;
-    void UpdateSlotUI(uint64 SlotIndex);
-    void RemoveItemIcon(uint64 SlotIndex);
-    void ShiftItems(uint64 StartIndex, uint64 EndIndex, EDirection Direction, bool bUpdateUI);
-    void StartSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
-    FVector2D GetSlotPosition(uint64 SlotIndex) const;
-    float CustomEaseInOut(float T);
-    void Create();
-
-    void ScheduleSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
-
-private:
-    UPROPERTY()
     uint64 MaxRows = 3;
 
-    UPROPERTY()
     uint64 MaxColumns = 4;
 
     UPROPERTY()
@@ -119,7 +93,7 @@ private:
     TArray<TObjectPtr<UBorder>> ForegroundBorders;
 
     UPROPERTY()
-    TArray<TObjectPtr<UOverlay>> IconSlots;
+    TArray<TObjectPtr<USizeBox>> IconSlots;
 
     UPROPERTY()
     TArray<bool> bCounterTextUpdated;
@@ -131,7 +105,7 @@ private:
     TObjectPtr<UBorder> BackgroundBorder;
 
     UPROPERTY()
-    UCanvasPanelSlot* BackgroundBorderSlot;
+    TObjectPtr<UCanvasPanelSlot> BackgroundBorderSlot;
 
     UPROPERTY()
     TObjectPtr<UTextBlock> Title;
@@ -142,6 +116,9 @@ private:
     UPROPERTY()
     UUniformGridSlot* GridSlot;
 
+    static uint64 ItemCounter;
+
+    // Dragging state
     UPROPERTY()
     int32 DraggedItemIndex;
 
@@ -149,17 +126,15 @@ private:
     int32 OriginalSlotIndex;
 
     UPROPERTY()
-    int32 PreviousSlotIndex; // Added to track the previous slot during dragging
+    int32 PreviousSlotIndex;
 
     UPROPERTY()
     FItem DraggedItem;
 
     UPROPERTY()
-    TObjectPtr<UOverlay> DraggedOverlay;
-
-    UPROPERTY()
     bool bIsDragging;
 
+    // Sliding animation state
     UPROPERTY()
     bool bIsSliding;
 
@@ -194,14 +169,29 @@ private:
     bool bAnimationScheduled;
 
     UPROPERTY()
-    uint64 ScheduledFromIndex;
+    int32 ScheduledFromIndex;
 
     UPROPERTY()
-    uint64 ScheduledToIndex;
+    int32 ScheduledToIndex;
 
     UPROPERTY()
     EDirection ScheduledDirection;
 
     UPROPERTY()
-    int32 MoveCount;
+    uint64 MoveCount;
+
+    void Create();
+    void UpdateSlotUI(uint64 SlotIndex);
+    void RemoveItemIcon(uint64 SlotIndex);
+    void CreateItemIcon(uint64 SlotIndex);
+    void CreateIconCounterText(uint64 SlotIndex);
+    uint64 FindFirstEmptySlot() const;
+    EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
+    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
+    int32 FindItemIndex(const FItem& TargetItem) const;
+    void ShiftItems(uint64 StartIndex, uint64 EndIndex, EDirection Direction, bool bUpdateUI);
+    void ScheduleSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
+    void StartSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
+    FVector2D GetSlotPosition(uint64 SlotIndex) const;
+    float CustomEaseInOut(float T);
 };
