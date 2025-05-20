@@ -5,24 +5,26 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/UniformGridPanel.h"
-#include "Components/VerticalBox.h"
-#include "Components/UniformGridSlot.h"
-#include "Components/VerticalBoxSlot.h"
-#include "Components/TextBlock.h"
 #include "Components/Border.h"
+#include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/UniformGridSlot.h"
+#include "Components/SizeBox.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
+#include "Components/Image.h"
+#include "Styling/SlateTypes.h"
+#include "Math/UnrealMathUtility.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
-#include "Components/Overlay.h"
-#include "Components/OverlaySlot.h"
 #include "Engine/LocalPlayer.h"
-#include "Components/Image.h"
 #include "Blueprint/WidgetTree.h"
 #include "GameFramework/Actor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Engine/Texture2D.h"
-#include "Components/SizeBox.h"
 #include "Engine/GameViewportClient.h"
 #include "Item.h"
 #include "Inventory.generated.h"
@@ -52,40 +54,82 @@ public:
     virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    UFUNCTION(BlueprintCallable)
     void AddItem(AActor* ItemActor);
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void RemoveItem();
+    UFUNCTION()
+    void RemoveItem(uint64 SlotIndex);
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void Open();
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void Close();
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    bool GetIsInventoryFull() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    TArray<FItem>& GetItems();
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    TArray<UBorder*> GetForegroundBorders();
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    UUniformGridPanel* GetGrid();
+    UFUNCTION()
     uint64 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
+
+    UFUNCTION(BlueprintCallable)
     void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
 
+    UFUNCTION()
+    EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
+
+    UFUNCTION()
+    void ShiftItems(uint64 StartIndex, uint64 EndIndex, EDirection Direction, bool bUpdateUI);
+
+    UFUNCTION()
+    void UpdateSlotUI(uint64 SlotIndex);
+
+    UFUNCTION()
+    void CreateItemIcon(uint64 SlotIndex);
+
+    UFUNCTION()
+    void CreateIconCounterText(uint64 SlotIndex);
+
+    UFUNCTION()
+    uint64 FindFirstEmptySlot() const;
+
+    UFUNCTION()
+    void RemoveItemIcon(uint64 SlotIndex);
+
+    UFUNCTION(BlueprintCallable)
+    void Create();
+
+    UFUNCTION(BlueprintCallable)
+    void Open();
+
+    UFUNCTION(BlueprintCallable)
+    void Close();
+
+    UFUNCTION(BlueprintCallable)
+    bool GetIsInventoryFull() const;
+
+    UFUNCTION(BlueprintCallable)
+    TArray<FItem>& GetItems();
+
+    UFUNCTION(BlueprintCallable)
+    TArray<UBorder*> GetForegroundBorders();
+
+    UFUNCTION(BlueprintCallable)
+    UUniformGridPanel* GetGrid();
+
+    UFUNCTION(BlueprintCallable)
+    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
+
+    UFUNCTION(BlueprintCallable)
+    int32 FindItemIndex(const FItem& TargetItem) const;
+
+    UFUNCTION()
+    void ScheduleSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
+
+    UFUNCTION()
+    void StartSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
+
+    UFUNCTION()
+    FVector2D GetSlotPosition(uint64 SlotIndex) const;
+
+    UFUNCTION(BlueprintCallable)
+    float CustomEaseInOut(float T);
+
+    UFUNCTION(BlueprintCallable)
+    bool IsEdgeSlot(int32 SlotIndex) const;
+
 protected:
-    uint64 MaxRows = 3;
-
-    uint64 MaxColumns = 4;
-
-    UPROPERTY()
-    bool bIsInventoryFull;
-
     UPROPERTY()
     TArray<FItem> Items;
 
@@ -97,6 +141,80 @@ protected:
 
     UPROPERTY()
     TArray<bool> bCounterTextUpdated;
+
+    UPROPERTY()
+    bool bIsInventoryFull;
+
+    UPROPERTY()
+    uint64 DraggedItemIndex;
+
+    UPROPERTY()
+    uint64 OriginalSlotIndex;
+
+    UPROPERTY()
+    uint64 PreviousSlotIndex;
+
+    UPROPERTY()
+    bool bIsDragging;
+
+    UPROPERTY()
+    bool bIsSliding;
+
+    UPROPERTY()
+    uint64 SlideFromIndex;
+
+    UPROPERTY()
+    uint64 SlideToIndex;
+
+    UPROPERTY()
+    float SlideProgress;
+
+    UPROPERTY()
+    float SlideDuration;
+
+    UPROPERTY()
+    TArray<TObjectPtr<UOverlay>> SlidingOverlays;
+
+    UPROPERTY()
+    TArray<uint64> SlideFromIndices;
+
+    UPROPERTY()
+    TArray<uint64> SlideToIndices;
+
+    UPROPERTY()
+    TArray<FItem> SlidingItems;
+
+    UPROPERTY()
+    FItem SlidingItem;
+
+    UPROPERTY()
+    bool bAnimationScheduled;
+
+    UPROPERTY()
+    uint64 ScheduledFromIndex;
+
+    UPROPERTY()
+    uint64 ScheduledToIndex;
+
+    UPROPERTY()
+    EDirection ScheduledDirection;
+
+    UPROPERTY()
+    uint64 MoveCount;
+    
+    static uint64 ItemCounter;
+
+    UPROPERTY()
+    FItem DraggedItem;
+
+    UPROPERTY()
+    TObjectPtr<UOverlay> DraggedItemWidget;
+
+    UPROPERTY()
+    bool bDragStarted;
+
+    UPROPERTY()
+    FVector2D DragStartPosition;
 
     UPROPERTY()
     TObjectPtr<UCanvasPanel> Canvas;
@@ -114,84 +232,11 @@ protected:
     TObjectPtr<UUniformGridPanel> Grid;
 
     UPROPERTY()
-    UUniformGridSlot* GridSlot;
+    TObjectPtr<UUniformGridSlot> GridSlot;
 
-    static uint64 ItemCounter;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+    int32 MaxRows;
 
-    // Dragging state
-    UPROPERTY()
-    int32 DraggedItemIndex;
-
-    UPROPERTY()
-    int32 OriginalSlotIndex;
-
-    UPROPERTY()
-    int32 PreviousSlotIndex;
-
-    UPROPERTY()
-    FItem DraggedItem;
-
-    UPROPERTY()
-    bool bIsDragging;
-
-    // Sliding animation state
-    UPROPERTY()
-    bool bIsSliding;
-
-    UPROPERTY()
-    int32 SlideFromIndex;
-
-    UPROPERTY()
-    int32 SlideToIndex;
-
-    UPROPERTY()
-    float SlideProgress;
-
-    UPROPERTY()
-    float SlideDuration;
-
-    UPROPERTY()
-    FItem SlidingItem;
-
-    UPROPERTY()
-    TArray<TObjectPtr<UOverlay>> SlidingOverlays;
-
-    UPROPERTY()
-    TArray<int32> SlideFromIndices;
-
-    UPROPERTY()
-    TArray<int32> SlideToIndices;
-
-    UPROPERTY()
-    TArray<FItem> SlidingItems;
-
-    UPROPERTY()
-    bool bAnimationScheduled;
-
-    UPROPERTY()
-    int32 ScheduledFromIndex;
-
-    UPROPERTY()
-    int32 ScheduledToIndex;
-
-    UPROPERTY()
-    EDirection ScheduledDirection;
-
-    UPROPERTY()
-    uint64 MoveCount;
-
-    void Create();
-    void UpdateSlotUI(uint64 SlotIndex);
-    void RemoveItemIcon(uint64 SlotIndex);
-    void CreateItemIcon(uint64 SlotIndex);
-    void CreateIconCounterText(uint64 SlotIndex);
-    uint64 FindFirstEmptySlot() const;
-    EDirection GetMoveDirection(uint64 RowA, uint64 ColA, uint64 RowB, uint64 ColB);
-    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
-    int32 FindItemIndex(const FItem& TargetItem) const;
-    void ShiftItems(uint64 StartIndex, uint64 EndIndex, EDirection Direction, bool bUpdateUI);
-    void ScheduleSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
-    void StartSlideAnimation(uint64 FromIndex, uint64 ToIndex, EDirection Direction);
-    FVector2D GetSlotPosition(uint64 SlotIndex) const;
-    float CustomEaseInOut(float T);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+    int32 MaxColumns;
 };
