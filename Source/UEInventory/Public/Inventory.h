@@ -27,6 +27,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/GameViewportClient.h"
 #include "Item.h"
+#include "Slate.h"
 #include "Inventory.generated.h"
 
 UENUM(BlueprintType)
