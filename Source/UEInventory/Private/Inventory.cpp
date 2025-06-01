@@ -372,7 +372,7 @@ FReply UInventory::NativeOnMouseMove(const FGeometry& InGeometry, const FPointer
 
 FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-     if (!bIsDragging)
+  if (!bIsDragging)
     {
         return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
     }
@@ -462,129 +462,9 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
         }
         else
         {
-            // Dropped outside entire grid → spawn actor in world, then remove from inventory
-            UE_LOG(LogTemp, Log, TEXT("--- Entering spawn section (interior-drag branch) ---"));
-
-            if (DraggedItem.StaticMesh.IsValid())
-            {
-                UE_LOG(LogTemp, Log, TEXT("Spawning AStaticMeshActor with mesh: %s"), *DraggedItem.StaticMesh->GetName());
-            }
-            else if (DraggedItem.ReferencedActorClass)
-            {
-                UE_LOG(LogTemp, Log, TEXT("Spawning ReferencedActorClass: %s"), *DraggedItem.ReferencedActorClass->GetName());
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("DraggedItem has neither StaticMesh nor ReferencedActorClass"));
-            }
-
-            UWorld* World = GetWorld();
-            if (World)
-            {
-                // 1) Log and visualize the stored world transform
-                const FTransform& ItemTransform = DraggedItem.WorldTransform;
-                const FVector ItemLocation      = ItemTransform.GetLocation();
-                const FVector ItemScale3D       = ItemTransform.GetScale3D();
-                const FRotator ItemRotation     = ItemTransform.GetRotation().Rotator();
-
-                UE_LOG(LogTemp, Log,
-                    TEXT("DraggedItem.WorldTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f), Scale=(%.3f, %.3f, %.3f)"),
-                    ItemLocation.X, ItemLocation.Y, ItemLocation.Z,
-                    ItemRotation.Pitch, ItemRotation.Yaw, ItemRotation.Roll,
-                    ItemScale3D.X, ItemScale3D.Y, ItemScale3D.Z);
-
-                // 2) Draw a debug sphere at that location for 5 seconds so you can see where it would be
-                DrawDebugSphere(World, ItemLocation, 25.0f, 12, FColor::Red, false, 100.0f);
-
-                // 3) Override only the scale—use the same location/rotation, but force scale = (1,1,1)
-                FTransform SpawnTransform;
-                SpawnTransform.SetLocation(ItemLocation);
-                SpawnTransform.SetRotation(ItemTransform.GetRotation());
-                SpawnTransform.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
-
-                UE_LOG(LogTemp, Log,
-                    TEXT("Using SpawnTransform (forced scale 1): Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f), Scale=(1,1,1)"),
-                    SpawnTransform.GetLocation().X, SpawnTransform.GetLocation().Y, SpawnTransform.GetLocation().Z,
-                    SpawnTransform.GetRotation().Rotator().Pitch, SpawnTransform.GetRotation().Rotator().Yaw, SpawnTransform.GetRotation().Rotator().Roll);
-
-                FActorSpawnParameters SpawnParams;
-                SpawnParams.SpawnCollisionHandlingOverride =
-                    ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-                // If we stored a UStaticMesh, spawn an AStaticMeshActor
-                if (DraggedItem.StaticMesh.IsValid())
-                {
-                    AStaticMeshActor* MeshActor = World->SpawnActor<AStaticMeshActor>(
-                        AStaticMeshActor::StaticClass(),
-                        SpawnTransform,
-                        SpawnParams);
-
-                    if (MeshActor)
-                    {
-                        UStaticMesh* LoadedMesh = DraggedItem.StaticMesh.LoadSynchronous();
-                        if (LoadedMesh)
-                        {
-                            UStaticMeshComponent* MeshComp = MeshActor->GetStaticMeshComponent();
-                            MeshComp->SetStaticMesh(LoadedMesh);
-                            MeshComp->SetMobility(EComponentMobility::Movable);
-                            MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-                            MeshActor->SetActorEnableCollision(true);
-                            MeshActor->SetActorHiddenInGame(false);
-                            MeshComp->SetVisibility(true);
-                            MeshActor->SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
-
-                            FVector FinalLoc  = MeshComp->GetComponentLocation();
-                            FVector FinalScale= MeshComp->GetComponentScale();
-                            UE_LOG(LogTemp, Log,
-                                TEXT("MeshActor spawned SUCCESS. Final Location=(%.3f, %.3f, %.3f), Final Scale=(%.3f, %.3f, %.3f)"),
-                                FinalLoc.X, FinalLoc.Y, FinalLoc.Z,
-                                FinalScale.X, FinalScale.Y, FinalScale.Z);
-                        }
-                        else
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("Failed to load StaticMesh asset"));
-                            MeshActor->Destroy();
-                        }
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Failed to spawn AStaticMeshActor"));
-                    }
-                }
-                // Otherwise, fall back to spawning the original actor class
-                else if (DraggedItem.ReferencedActorClass)
-                {
-                    AActor* TrueActor = World->SpawnActor<AActor>(
-                        DraggedItem.ReferencedActorClass,
-                        SpawnTransform,
-                        SpawnParams);
-
-                    if (TrueActor)
-                    {
-                        TrueActor->SetActorEnableCollision(true);
-                        TrueActor->SetActorHiddenInGame(false);
-                        TrueActor->SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
-
-                        FVector ActorLoc   = TrueActor->GetActorLocation();
-                        FVector ActorScale = TrueActor->GetActorScale3D();
-                        UE_LOG(LogTemp, Log,
-                            TEXT("ReferencedActorClass spawned SUCCESS. Location=(%.3f, %.3f, %.3f), Scale=(%.3f, %.3f, %.3f)"),
-                            ActorLoc.X, ActorLoc.Y, ActorLoc.Z,
-                            ActorScale.X, ActorScale.Y, ActorScale.Z);
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Failed to spawn ReferencedActorClass actor"));
-                    }
-                }
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("No valid World to spawn item"));
-            }
-
-            // Remove from inventory
-            RemoveItem(OriginalSlotIndex);
+            // DROPPED OUTSIDE the grid _but_ started from an interior slot → NO SPAWN.
+            // Simply restore the item back to its original slot:
+            Items[OriginalSlotIndex] = DraggedItem;
             UpdateSlotUI(OriginalSlotIndex);
         }
 
@@ -631,12 +511,12 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
         }
         else
         {
-            // Still outside → spawn actor in world and remove
+            // STILL OUTSIDE → spawn actor and attach a UStaticMeshComponent dynamically
             UE_LOG(LogTemp, Log, TEXT("--- Entering spawn section (edge-drag branch) ---"));
 
             if (DraggedItem.StaticMesh.IsValid())
             {
-                UE_LOG(LogTemp, Log, TEXT("Spawning AStaticMeshActor with mesh: %s"), *DraggedItem.StaticMesh->GetName());
+                UE_LOG(LogTemp, Log, TEXT("Spawning actor with mesh: %s"), *DraggedItem.StaticMesh.ToString());
             }
             else if (DraggedItem.ReferencedActorClass)
             {
@@ -650,110 +530,87 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
             UWorld* World = GetWorld();
             if (World)
             {
-                // 1) Log and visualize the stored world transform
+                // Use the stored WorldTransform (force scale = 1)
                 const FTransform& ItemTransform = DraggedItem.WorldTransform;
                 const FVector ItemLocation      = ItemTransform.GetLocation();
-                const FVector ItemScale3D       = ItemTransform.GetScale3D();
                 const FRotator ItemRotation     = ItemTransform.GetRotation().Rotator();
 
                 UE_LOG(LogTemp, Log,
-                    TEXT("DraggedItem.WorldTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f), Scale=(%.3f, %.3f, %.3f)"),
+                    TEXT("DraggedItem.WorldTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f)"),
                     ItemLocation.X, ItemLocation.Y, ItemLocation.Z,
-                    ItemRotation.Pitch, ItemRotation.Yaw, ItemRotation.Roll,
-                    ItemScale3D.X, ItemScale3D.Y, ItemScale3D.Z);
+                    ItemRotation.Pitch, ItemRotation.Yaw, ItemRotation.Roll);
 
-                // 2) Draw a debug sphere at that location for 5 seconds
+                // Draw a debug sphere so you see where it spawns
                 DrawDebugSphere(World, ItemLocation, 25.0f, 12, FColor::Blue, false, 5.0f);
 
-                // 3) Override only the scale—use the same location/rotation, but force scale = (1,1,1)
+                // Set up a spawn transform with unit scale
                 FTransform SpawnTransform;
                 SpawnTransform.SetLocation(ItemLocation);
                 SpawnTransform.SetRotation(ItemTransform.GetRotation());
                 SpawnTransform.SetScale3D(FVector(1.0f, 1.0f, 1.0f));
 
-                UE_LOG(LogTemp, Log,
-                    TEXT("Using SpawnTransform (forced scale 1): Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f), Scale=(1,1,1)"),
-                    SpawnTransform.GetLocation().X, SpawnTransform.GetLocation().Y, SpawnTransform.GetLocation().Z,
-                    SpawnTransform.GetRotation().Rotator().Pitch, SpawnTransform.GetRotation().Rotator().Yaw, SpawnTransform.GetRotation().Rotator().Roll);
-
                 FActorSpawnParameters SpawnParams;
-                SpawnParams.SpawnCollisionHandlingOverride =
-                    ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+                SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+                //
+                // Spawn exactly one actor (either the saved ReferencedActorClass or a generic AActor)
+                //
+                AStaticMeshActor* MeshActor = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), SpawnTransform, SpawnParams);
+                MeshActor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+
+                // Assign the static mesh
                 if (DraggedItem.StaticMesh.IsValid())
                 {
-                    AStaticMeshActor* MeshActor = World->SpawnActor<AStaticMeshActor>(
-                        AStaticMeshActor::StaticClass(),
-                        SpawnTransform,
-                        SpawnParams);
-
-                    if (MeshActor)
+                    UStaticMesh* LoadedMesh = DraggedItem.StaticMesh.LoadSynchronous();
+                    if (LoadedMesh)
                     {
-                        UStaticMesh* LoadedMesh = DraggedItem.StaticMesh.LoadSynchronous();
-                        if (LoadedMesh)
+                        MeshActor->GetStaticMeshComponent()->SetStaticMesh(LoadedMesh);
+                        UE_LOG(LogTemp, Log, TEXT("Assigned StaticMesh: %s"), *LoadedMesh->GetName());
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("Failed to load StaticMesh."));
+                    }
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("DraggedItem.StaticMesh is not valid."));
+                }
+                
+                // Apply stored materials
+                if (MeshActor->GetStaticMeshComponent())
+                {
+                    for (int32 Index = 0; Index < DraggedItem.StoredMaterials.Num(); ++Index)
+                    {
+                        if (DraggedItem.StoredMaterials[Index].IsValid())
                         {
-                            UStaticMeshComponent* MeshComp = MeshActor->GetStaticMeshComponent();
-                            MeshComp->SetStaticMesh(LoadedMesh);
-                            MeshComp->SetMobility(EComponentMobility::Movable);
-                            MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-                            MeshActor->SetActorEnableCollision(true);
-                            MeshActor->SetActorHiddenInGame(false);
-                            MeshComp->SetVisibility(true);
-                            MeshActor->SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
-
-                            FVector FinalLoc   = MeshComp->GetComponentLocation();
-                            FVector FinalScale = MeshComp->GetComponentScale();
-                            UE_LOG(LogTemp, Log,
-                                TEXT("MeshActor spawned SUCCESS. Final Location=(%.3f, %.3f, %.3f), Final Scale=(%.3f, %.3f, %.3f)"),
-                                FinalLoc.X, FinalLoc.Y, FinalLoc.Z,
-                                FinalScale.X, FinalScale.Y, FinalScale.Z);
+                            if (DraggedItem.StoredMaterials[Index].LoadSynchronous())
+                            {
+                                MeshActor->GetStaticMeshComponent()->SetMaterial(Index, DraggedItem.StoredMaterials[Index].LoadSynchronous());
+                                UE_LOG(LogTemp, Log, TEXT("Applied material to slot %d: %s"), Index, *DraggedItem.StoredMaterials[Index].LoadSynchronous()->GetName());
+                            }
+                            else
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("Failed to load material at slot %d."), Index);
+                            }
                         }
                         else
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("Failed to load StaticMesh asset"));
-                            MeshActor->Destroy();
+                            UE_LOG(LogTemp, Warning, TEXT("Invalid material pointer at slot %d."), Index);
                         }
                     }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Failed to spawn AStaticMeshActor"));
-                    }
                 }
-                else if (DraggedItem.ReferencedActorClass)
+                else
                 {
-                    AActor* TrueActor = World->SpawnActor<AActor>(
-                        DraggedItem.ReferencedActorClass,
-                        SpawnTransform,
-                        SpawnParams);
-
-                    if (TrueActor)
-                    {
-                        TrueActor->SetActorEnableCollision(true);
-                        TrueActor->SetActorHiddenInGame(false);
-                        TrueActor->SetActorScale3D(FVector(1.0f, 1.0f, 1.0f));
-
-                        FVector ActorLoc   = TrueActor->GetActorLocation();
-                        FVector ActorScale = TrueActor->GetActorScale3D();
-                        UE_LOG(LogTemp, Log,
-                            TEXT("ReferencedActorClass spawned SUCCESS. Location=(%.3f, %.3f, %.3f), Scale=(%.3f, %.3f, %.3f)"),
-                            ActorLoc.X, ActorLoc.Y, ActorLoc.Z,
-                            ActorScale.X, ActorScale.Y, ActorScale.Z);
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("Failed to spawn ReferencedActorClass actor"));
-                    }
+                    UE_LOG(LogTemp, Warning, TEXT("No materials found for 'StaticMeshComponent'."));
                 }
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("No valid World to spawn item"));
-            }
 
-            // Remove from inventory
-            RemoveItem(OriginalSlotIndex);
-            UpdateSlotUI(OriginalSlotIndex);
-            bHandled = true;
+                // Finally, remove from inventory and update UI
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+
+                bHandled = true;
+            }
         }
     }
 
@@ -812,13 +669,23 @@ void UInventory::AddItem(AActor* ItemActor)
     // Attempt to grab the static mesh from the actor's components:
     if (UStaticMeshComponent* MeshComp = ItemActor->FindComponentByClass<UStaticMeshComponent>())
     {
+        UE_LOG(LogTemp, Warning, TEXT("Mesh Component Name: %s"), *MeshComp->GetFName().ToString());
         if (MeshComp->GetStaticMesh())
         {
             // Save that mesh into our FItem so we can reassign it when spawning back into the world.
             NewItem.StaticMesh = MeshComp->GetStaticMesh();
+            UE_LOG(LogTemp, Warning, TEXT("Sattic Mesh Name: %s"),  *NewItem.StaticMesh->GetName());
+        }
+        
+        for (int32 i = 0; i < MeshComp->GetNumMaterials(); ++i)
+        {
+            if (MeshComp->GetMaterial(i))
+            {
+                NewItem.StoredMaterials.Add(MeshComp->GetMaterial(i));
+            }
         }
     }
-
+    
     // Update the UI for this new slot.
     UpdateSlotUI(EmptySlotIndex);
 
