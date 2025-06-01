@@ -199,7 +199,6 @@ protected:
     EDirection GetMoveDirection(uint32 RowA, uint32 ColA, uint32 RowB, uint32 ColB) const;
     EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
     uint32 FindItemIndex(const FItem& TargetItem) const;
-    void ShiftItems(uint32 StartIndex, uint32 EndIndex, EDirection Direction, bool bUpdateUI);
     void ScheduleSlideAnimation(uint32 FromIndex, uint32 ToIndex, EDirection Direction);
     FVector2D GetSlotPosition(uint32 SlotIndex) const;
     float CustomEaseInOut(float T) const;
