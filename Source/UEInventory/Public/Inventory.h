@@ -18,6 +18,7 @@
 #include "Item.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Engine/StaticMeshActor.h"
+#include "Kismet/GameplayStatics.h"
 #include "Inventory.generated.h"
 
 UENUM(BlueprintType)
