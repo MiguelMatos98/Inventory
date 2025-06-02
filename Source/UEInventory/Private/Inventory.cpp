@@ -189,7 +189,7 @@ FReply UInventory::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FP
         uint64 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
         if (HoveredIndex != INDEX_NONE &&
             Items.IsValidIndex(HoveredIndex) &&
-            Items[HoveredIndex].ReferencedActorClass)
+            Items[HoveredIndex].WorldObjectReverence)
         {
             DraggedItemIndex   = HoveredIndex;
             OriginalSlotIndex  = HoveredIndex;
@@ -318,9 +318,9 @@ FReply UInventory::NativeOnMouseMove(const FGeometry& InGeometry, const FPointer
                     // (a) Icon or blue square
                     UImage* ItemImage = NewObject<UImage>(this);
                     ItemImage->SetVisibility(ESlateVisibility::Visible);
-                    if (DraggedItem.IconTexture.IsValid())
+                    if (DraggedItem.Texture.IsValid())
                     {
-                        ItemImage->SetBrushFromTexture(DraggedItem.IconTexture.Get());
+                        ItemImage->SetBrushFromTexture(DraggedItem.Texture.Get());
                     }
                     else
                     {
@@ -430,7 +430,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
     if (bMouseInsideGrid && HoveredIndex != INDEX_NONE && Items.IsValidIndex(HoveredIndex))
     {
         // Dropped onto a valid slot inside the grid
-        if (!Items[HoveredIndex].IsValidItem())
+        if (!Items[HoveredIndex].WorldObjectReverence)
         {
             // 1) Target slot is empty → move there
             Items[HoveredIndex]      = DraggedItem;
@@ -501,25 +501,25 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
         {
             UE_LOG(LogTemp, Log, TEXT("Spawning actor with mesh: %s"), *DraggedItem.StaticMesh.ToString());
         }
-        else if (DraggedItem.ReferencedActorClass)
+        else if (DraggedItem.WorldObjectReverence)
         {
-            UE_LOG(LogTemp, Log, TEXT("Spawning ReferencedActorClass: %s"), *DraggedItem.ReferencedActorClass->GetName());
+            UE_LOG(LogTemp, Log, TEXT("Spawning WorldObjectReverence: %s"), *DraggedItem.WorldObjectReverence->GetName());
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("DraggedItem has neither StaticMesh nor ReferencedActorClass"));
+            UE_LOG(LogTemp, Warning, TEXT("DraggedItem has neither StaticMesh nor WorldObjectReverence"));
         }
 
         UWorld* World = GetWorld();
         if (World)
         {
-            // Use the stored WorldTransform (force scale = 1)
-            const FTransform& ItemTransform = DraggedItem.WorldTransform;
+            // Use the stored WorldObjectTransform (force scale = 1)
+            const FTransform& ItemTransform = DraggedItem.WorldObjectTransform;
             const FVector ItemLocation      = ItemTransform.GetLocation();
             const FRotator ItemRotation     = ItemTransform.GetRotation().Rotator();
 
             UE_LOG(LogTemp, Log,
-                TEXT("DraggedItem.WorldTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f)"),
+                TEXT("DraggedItem.WorldObjectTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f)"),
                 ItemLocation.X, ItemLocation.Y, ItemLocation.Z,
                 ItemRotation.Pitch, ItemRotation.Yaw, ItemRotation.Roll);
 
@@ -537,7 +537,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
                 ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
             //
-            // Spawn exactly one actor (either the saved ReferencedActorClass or a generic AActor)
+            // Spawn exactly one actor (either the saved WorldObjectReverence or a generic AActor)
             //
             AStaticMeshActor* MeshActor =
                 World->SpawnActor<AStaticMeshActor>(
@@ -650,10 +650,10 @@ void UInventory::AddItem(AActor* ItemActor)
     NewItem = FItem();  // Reset to defaults.
 
     // Store the actor class so we can spawn it later if needed.
-    NewItem.ReferencedActorClass = ItemActor->GetClass();
+    NewItem.WorldObjectReverence = ItemActor->GetClass();
 
     // Store the world transform at the moment of pickup.
-    NewItem.WorldTransform = ItemActor->GetActorTransform();
+    NewItem.WorldObjectTransform = ItemActor->GetActorTransform();
 
     // Store the index in the inventory.
     NewItem.Index = ItemCounter;
@@ -691,7 +691,7 @@ void UInventory::AddItem(AActor* ItemActor)
 
 void UInventory::RemoveItem(int32 SlotIndex)
 {
-    if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].ReferencedActorClass)
+    if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].WorldObjectReverence)
     {
         UE_LOG(LogTemp, Warning, TEXT("RemoveItem: Invalid slot %d or no item to remove"), SlotIndex);
         return;
@@ -705,7 +705,7 @@ void UInventory::RemoveItem(int32 SlotIndex)
     uint64 NewIndex = 0;
     for (uint64 i = 0; i < static_cast<uint64>(Items.Num()); ++i)
     {
-        if (Items[i].ReferencedActorClass)
+        if (Items[i].WorldObjectReverence)
         {
             Items[i].Index = NewIndex++;
             CreateIconCounterText(i);
@@ -841,7 +841,7 @@ void UInventory::MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementSta
     UE_LOG(LogTemp, Log, TEXT("MoveItem: Moving from (%d,%d) to (%d,%d), Direction=%d"),
         FromRow, FromCol, ToRow, ToCol, (uint8)Direction);
 
-    if (Items[HoveredIndex].ReferencedActorClass)
+    if (Items[HoveredIndex].WorldObjectReverence)
     {
         FItem TempItem = Items[HoveredIndex];
         Items[HoveredIndex] = DraggedItem;
@@ -900,7 +900,7 @@ void UInventory::UpdateSlotUI(uint32 SlotIndex)
     // 2) Otherwise, clear everything and redraw the actual item icon (with its red index) if present.
     SizeBox->ClearChildren();
 
-    if (Items[SlotIndex].ReferencedActorClass)
+    if (Items[SlotIndex].WorldObjectReverence)
     {
         CreateItemIcon(SlotIndex);
         CreateIconCounterText(SlotIndex);
@@ -913,7 +913,7 @@ void UInventory::UpdateSlotUI(uint32 SlotIndex)
     UE_LOG(LogTemp, Log, TEXT(
         "UpdateSlotUI: Slot %d border updated, HasItem=%s"),
         SlotIndex,
-        Items[SlotIndex].ReferencedActorClass ? TEXT("True") : TEXT("False"));
+        Items[SlotIndex].WorldObjectReverence ? TEXT("True") : TEXT("False"));
 }
 
 void UInventory::CreateItemIcon(uint32 SlotIndex)
@@ -935,9 +935,9 @@ void UInventory::CreateItemIcon(uint32 SlotIndex)
     ImageSlot->SetHorizontalAlignment(HAlign_Fill);
     ImageSlot->SetVerticalAlignment(VAlign_Fill);
 
-    if (Items[SlotIndex].IconTexture.IsValid())
+    if (Items[SlotIndex].Texture.IsValid())
     {
-        ItemIcon->SetBrushFromTexture(Items[SlotIndex].IconTexture.Get());
+        ItemIcon->SetBrushFromTexture(Items[SlotIndex].Texture.Get());
     }
     else
     {
@@ -948,7 +948,7 @@ void UInventory::CreateItemIcon(uint32 SlotIndex)
 void UInventory::CreateIconCounterText(uint32 SlotIndex)
 {
     if (!ForegroundBorders.IsValidIndex(SlotIndex) || !Items.IsValidIndex(SlotIndex)) return;
-    if (!Items[SlotIndex].ReferencedActorClass) return;
+    if (!Items[SlotIndex].WorldObjectReverence) return;
 
     TObjectPtr<USizeBox> SizeBox = Cast<USizeBox>(ForegroundBorders[SlotIndex]->GetContent());
     if (!SizeBox) return;
@@ -990,7 +990,7 @@ uint32 UInventory::FindFirstEmptySlot() const
 {
     for (uint64 i = 0; i < static_cast<uint64>(Items.Num()); i++)
     {
-        if (!Items[i].ReferencedActorClass) return i;
+        if (!Items[i].WorldObjectReverence) return i;
     }
     return INDEX_NONE;
 }
