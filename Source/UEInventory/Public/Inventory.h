@@ -21,6 +21,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Inventory.generated.h"
 
+// I
 UENUM(BlueprintType)
 enum class EDirection : uint8
 {
