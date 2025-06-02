@@ -1,61 +1,48 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "Engine/Texture2D.h"
 #include "Item.generated.h"
-
-class UImage;
-class AActor;
-class UTexture2D;
 
 USTRUCT(BlueprintType)
 struct FItem
 {
     GENERATED_BODY()
 
-    /** Icon texture for UI */
+    // Item Texture 
     UPROPERTY(VisibleAnywhere, Category = "Items")
-    TSoftObjectPtr<UTexture2D> IconTexture;
+    TSoftObjectPtr<UTexture2D> Texture;
 
-    /** Actor class to respawn when dropped */
+    // Item Reference to World Object 
     UPROPERTY(VisibleAnywhere, Category = "Items")
-    TSubclassOf<AActor> ReferencedActorClass;
+    TSubclassOf<AActor> WorldObjectReverence;
 
-    /** Transform to spawn actor at */
+    // Item's World Object Transform
     UPROPERTY(VisibleAnywhere, Category = "Items")
-    FTransform WorldTransform;
+    FTransform WorldObjectTransform;
 
+    // Item Reference to World Object's Mesh  
     UPROPERTY(VisibleAnywhere, Category = "Items")
     TSoftObjectPtr<UStaticMesh> StaticMesh;
 
+    // Item's Array of World Object's Materials
     UPROPERTY()
     TArray<TSoftObjectPtr<UMaterialInterface>> StoredMaterials;
 
-    /** Index in inventory */
+    // Item index
     UPROPERTY(VisibleAnywhere, Category = "Items")
     int32 Index;
 
-    /** Can this item be dragged in the inventory? */
-    UPROPERTY(VisibleAnywhere, Category = "Items")
-    bool bIsDraggable;
-
     FItem()
-        : IconTexture(nullptr)
-        , ReferencedActorClass(nullptr)
-        , WorldTransform(FTransform::Identity)
+        : Texture(nullptr)
+        , WorldObjectReverence(nullptr)
+        , WorldObjectTransform(FTransform::Identity)
         , Index(0)
-        , bIsDraggable(true)
     {}
-
-    
-    bool IsValidItem() const { return ReferencedActorClass != nullptr; }
 
     bool operator==(const FItem& Other) const
     {
-        return ReferencedActorClass == Other.ReferencedActorClass && Index == Other.Index;
-    }
-
-    bool operator!=(const FItem& Other) const
-    {
-        return !(*this == Other);
+        return WorldObjectReverence == Other.WorldObjectReverence && Index == Other.Index;
     }
 };
