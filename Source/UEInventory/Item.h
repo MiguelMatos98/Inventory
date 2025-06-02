@@ -35,16 +35,9 @@ struct FItem
     int32 Index;
 
     // Default Constructor 
-    FItem()
-        : Texture(nullptr)
-        , WorldObjectReverence(nullptr)
-        , WorldObjectTransform(FTransform::Identity)
-        , Index(0)
-    {}
+    FItem();
 
     // Operator Overload for Item asignment 
-    bool operator==(const FItem& Other) const
-    {
-        return WorldObjectReverence == Other.WorldObjectReverence && Index == Other.Index;
-    }
+    bool operator==(const FItem& Other) const;
 };
+
