@@ -34,6 +34,7 @@ struct FItem
     UPROPERTY(VisibleAnywhere, Category = "Items")
     int32 Index;
 
+    // Default Constructor 
     FItem()
         : Texture(nullptr)
         , WorldObjectReverence(nullptr)
@@ -41,6 +42,7 @@ struct FItem
         , Index(0)
     {}
 
+    // Operator Overload for Item asignment 
     bool operator==(const FItem& Other) const
     {
         return WorldObjectReverence == Other.WorldObjectReverence && Index == Other.Index;
