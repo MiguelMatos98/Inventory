@@ -1,206 +1,1158 @@
-#pragma once
+#include "Inventory.h"
 
-#include "CoreMinimal.h"
-#include "Blueprint/UserWidget.h"
-#include "Blueprint/WidgetTree.h"
-#include "Components/CanvasPanel.h"
-#include "Components/CanvasPanelSlot.h"
-#include "Components/UniformGridPanel.h"
-#include "Components/UniformGridSlot.h"
-#include "Components/Border.h"
-#include "Components/TextBlock.h"
-#include "Components/Image.h"
-#include "Components/SizeBox.h"
-#include "Components/Overlay.h"
-#include "Components/OverlaySlot.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
-#include "Item.h"
-#include "Brushes/SlateColorBrush.h"
-#include "Engine/StaticMeshActor.h"
-#include "Kismet/GameplayStatics.h"
-#include "Inventory.generated.h"
+// Initialization of static member
+uint32 UInventory::ItemCounter = 0;
 
-// I
-UENUM(BlueprintType)
-enum class EDirection : uint8
+UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer),
+      MaxRows(3),
+      MaxColumns(4),
+      bIsInventoryFull(false),
+      GridSlot(nullptr),
+      DraggedItemWidget(nullptr),
+      bPendingRemoval(false),
+      DraggedItemIndex(INDEX_NONE),
+      OriginalSlotIndex(INDEX_NONE), 
+      PreviousSlotIndex(INDEX_NONE),
+      bIsDragging(false),
+      bDragStarted(false),
+      DragStartPosition(FVector2D::ZeroVector),
+      bIsSliding(false),
+      SlideFromIndex(INDEX_NONE),
+      SlideToIndex(INDEX_NONE),
+      SlideProgress(0.0f),
+      SlideDuration(0.2f),
+      bAnimationScheduled(false),
+      ScheduledFromIndex(INDEX_NONE),
+      ScheduledToIndex(INDEX_NONE),
+      ScheduledDirection(EDirection::None),
+      bHasReindexedOnPopOut(false),
+      MoveCount(0)
 {
-    None,
-    Up,
-    Down,
-    Left,
-    Right
-};
+    // Setting member arrays size 
+    Items.SetNum(MaxRows * MaxColumns);
+    ForegroundBorders.SetNum(MaxRows * MaxColumns);
+}
 
-UCLASS()
-class UInventory : public UUserWidget
+void UInventory::NativeOnInitialized()
 {
-    GENERATED_BODY()
+    Super::NativeOnInitialized();
 
-public:
-    UInventory(const FObjectInitializer& ObjectInitializer);
+    bIsInventoryFull = false;
+    DraggedItemIndex = INDEX_NONE;
+    OriginalSlotIndex = INDEX_NONE;
+    PreviousSlotIndex = INDEX_NONE;
+    bIsDragging = false;
+    bIsSliding = false;
+    SlideFromIndex = INDEX_NONE;
+    SlideToIndex = INDEX_NONE;
+    SlideProgress = 0.0f;
+    bAnimationScheduled = false;
+    ScheduledFromIndex = INDEX_NONE;
+    ScheduledToIndex = INDEX_NONE;
+    ScheduledDirection = EDirection::None;
+    MoveCount = 0;
+    bDragStarted = false;
+    DragStartPosition = FVector2D::ZeroVector;
+    ItemCounter = 0;
 
-    virtual void NativeOnInitialized() override;
-    virtual void NativeConstruct() override;
-    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-    virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-    virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-    virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+    if (!WidgetTree)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("WidgetTree is invalid"));
+        return;
+    }
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void AddItem(AActor* ItemActor);
+    Canvas = NewObject<UCanvasPanel>(this);
+    WidgetTree->RootWidget = Canvas;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void RemoveItem(int32 SlotIndex);
+    BackgroundBorder = NewObject<UBorder>(this);
+    BackgroundBorder->SetBrushColor(FLinearColor::Gray);
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void Open();
+    Title = NewObject<UTextBlock>(this);
+    Title->SetText(FText::FromString(TEXT("Inventory")));
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void Close();
+    UVerticalBox* ContentBox = NewObject<UVerticalBox>(this);
+    UVerticalBoxSlot* TitleBoxSlot = ContentBox->AddChildToVerticalBox(Title);
+    TitleBoxSlot->SetHorizontalAlignment(HAlign_Center);
+    TitleBoxSlot->SetVerticalAlignment(VAlign_Top);
+    TitleBoxSlot->SetPadding(FMargin(10, 10, 10, 10));
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    bool GetIsInventoryFull() const;
+    Grid = NewObject<UUniformGridPanel>(this);
+    Grid->SetSlotPadding(FMargin(10, 10, 10, 10));
+    UVerticalBoxSlot* GridBoxSlot = ContentBox->AddChildToVerticalBox(Grid);
+    GridBoxSlot->SetHorizontalAlignment(HAlign_Fill);
+    GridBoxSlot->SetVerticalAlignment(VAlign_Fill);
+    GridBoxSlot->SetPadding(FMargin(10, 10, 10, 10));
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    const TArray<FItem>& GetItems() const;
+    BackgroundBorder->SetContent(ContentBox);
+    BackgroundBorderSlot = Canvas->AddChildToCanvas(BackgroundBorder);
+    BackgroundBorderSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+    BackgroundBorderSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    TArray<UBorder*> GetForegroundBorders() const;
+    // Set fixed background size to match the provided snippet
+    BackgroundBorderSlot->SetOffsets(FMargin(0, -100, 510.0f, 500.0f));
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    UUniformGridPanel* GetGrid() const;
+    SetRenderScale(FVector2D(1.0f, 1.0f));
+    Create();
+
+    if (GEngine && GEngine->GameViewport)
+    {
+        FVector2D ViewportSize;
+        GEngine->GameViewport->GetViewportSize(ViewportSize);
+        UE_LOG(LogTemp, Log, TEXT("Viewport Size: %s"), *ViewportSize.ToString());
+
+        if (BackgroundBorder)
+        {
+            FGeometry BorderGeometry = BackgroundBorder->GetCachedGeometry();
+            FVector2D BorderTopLeft = BorderGeometry.LocalToAbsolute(FVector2D::ZeroVector);
+            FVector2D BorderSize = BorderGeometry.GetLocalSize();
+            UE_LOG(LogTemp, Log, TEXT("BackgroundBorder: TopLeft=%s, Size=%s"), *BorderTopLeft.ToString(), *BorderSize.ToString());
+        }
+    }
+}
+
+void UInventory::NativeConstruct()
+{
+    Super::NativeConstruct();
+
+    if (BackgroundBorder) BackgroundBorder->ForceLayoutPrepass();
+    if (Grid) Grid->ForceLayoutPrepass();
+    if (Canvas) Canvas->ForceLayoutPrepass();
+    for (TObjectPtr<UBorder> Border : ForegroundBorders)
+    {
+        if (Border) Border->ForceLayoutPrepass();
+    }
+}
+
+void UInventory::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+
+    if (bAnimationScheduled)
+    {
+        bool bGeometryReady = true;
+        for (int32 i = 0; i < ForegroundBorders.Num(); ++i)
+        {
+            FVector2D Position = GetSlotPosition(i);
+            FGeometry SlotGeometry = ForegroundBorders[i]->GetCachedGeometry();
+            FVector2D SlotSize = SlotGeometry.GetLocalSize();
+            if (SlotSize.X < 10.0f || SlotSize.Y < 10.0f)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("NativeTick: Slot %d geometry invalid: Position=%s, Size=%s"),
+                    i, *Position.ToString(), *SlotSize.ToString());
+                bGeometryReady = false;
+                break;
+            }
+        }
+
+        if (bGeometryReady)
+        {
+            bAnimationScheduled = false;
+            ScheduledFromIndex = INDEX_NONE;
+            ScheduledToIndex = INDEX_NONE;
+            ScheduledDirection = EDirection::None;
+        }
+        else
+        {
+            if (Canvas) Canvas->ForceLayoutPrepass();
+            if (Grid) Grid->ForceLayoutPrepass();
+            for (TObjectPtr<UBorder> Border : ForegroundBorders)
+            {
+                if (Border) Border->ForceLayoutPrepass();
+            }
+        }
+    }
+
+    if (bIsSliding)
+    {
+        SlideProgress += InDeltaTime / SlideDuration;
+        if (SlideProgress >= 1.0f)
+        {
+            bIsSliding = false;
+            SlideProgress = 0.0f;
+            SlideFromIndex = INDEX_NONE;
+            SlideToIndex = INDEX_NONE;
+            SlidingItem = FItem();
+            SlidingOverlays.Empty();
+            SlideFromIndices.Empty();
+            SlideToIndices.Empty();
+            SlidingItems.Empty();
+
+            if (Grid) Grid->ForceLayoutPrepass();
+            if (Canvas) Canvas->ForceLayoutPrepass();
+        }
+    }
+}
+
+FReply UInventory::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+    if (InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
+    {
+        uint64 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
+        if (HoveredIndex != INDEX_NONE &&
+            Items.IsValidIndex(HoveredIndex) &&
+            Items[HoveredIndex].WorldObjectReverence)
+        {
+            DraggedItemIndex   = HoveredIndex;
+            OriginalSlotIndex  = HoveredIndex;
+            DraggedItem        = Items[HoveredIndex];
+            bIsDragging        = true;
+            bDragStarted       = false;
+            DragStartPosition  = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+
+            UE_LOG(LogTemp, Log, TEXT(
+                "NativeOnMouseButtonDown: Started drag potential for item %d from slot %llu"),
+                DraggedItem.Index, HoveredIndex);
+            return FReply::Handled();
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT(
+                "NativeOnMouseButtonDown: No valid item at HoveredIndex=%llu"), HoveredIndex);
+        }
+    }
+    return FReply::Unhandled();
+}
+
+FReply UInventory::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+    if (!bIsDragging)
+    {
+        return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+    }
+
+    const FVector2D CurrentPosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+    UE_LOG(LogTemp, Log, TEXT(
+        "NativeOnMouseMove: Dragging item %d, MousePos=%s, bDragStarted=%s"),
+        DraggedItem.Index,
+        *CurrentPosition.ToString(),
+        bDragStarted ? TEXT("True") : TEXT("False")
+    );
+
+    // If we've already popped out once, just move the floating widget:
+    if (bDragStarted && DraggedItemWidget && Canvas)
+    {
+        if (UCanvasPanelSlot* WidgetSlot = Cast<UCanvasPanelSlot>(DraggedItemWidget->Slot))
+        {
+            WidgetSlot->SetPosition(CurrentPosition - FVector2D(50.0f, 50.0f));
+        }
+        return FReply::Handled();
+    }
+
+    // Otherwise, check whether cursor just crossed outside the original slot:
+    {
+        // Force layout so slot geometry is up to date
+        if (BackgroundBorder) BackgroundBorder->ForceLayoutPrepass();
+        if (Canvas)          Canvas->ForceLayoutPrepass();
+        if (Grid)            Grid->ForceLayoutPrepass();
+        for (TObjectPtr<UBorder> Border : ForegroundBorders)
+        {
+            if (Border) Border->ForceLayoutPrepass();
+        }
+
+        bool bIsOutside = false;
+        const FVector2D MouseAbs = InMouseEvent.GetScreenSpacePosition();
+
+        if (ForegroundBorders.IsValidIndex(DraggedItemIndex) &&
+            ForegroundBorders[DraggedItemIndex])
+        {
+            const FGeometry SlotGeom      = ForegroundBorders[DraggedItemIndex]->GetCachedGeometry();
+            const FVector2D SlotTopLeft   = SlotGeom.LocalToAbsolute(FVector2D::ZeroVector);
+            const FVector2D SlotSize      = SlotGeom.GetLocalSize();
+            const FVector2D SlotBotRight  = SlotTopLeft + SlotSize;
+
+            if (SlotSize.X < 10.0f || SlotSize.Y < 10.0f)
+            {
+                UE_LOG(LogTemp, Warning, TEXT(
+                    "NativeOnMouseMove: Slot %d geometry invalid: Size=%s. Skipping edge check."),
+                    DraggedItemIndex, *SlotSize.ToString());
+                return FReply::Handled();
+            }
+
+            const int32 Row        = DraggedItemIndex / MaxColumns;
+            const int32 Col        = DraggedItemIndex % MaxColumns;
+            const float Padding    = 1.0f;
+            const float Buffer     = 1.0f;
+
+            // If the cursor moved beyond any edge of the original slot,
+            // we treat it as “popped out.”
+            if (Row == 0 && MouseAbs.Y < SlotTopLeft.Y - Padding - Buffer)
+            {
+                bIsOutside = true;
+            }
+            else if (Row == MaxRows - 1 && MouseAbs.Y > SlotBotRight.Y + Padding + Buffer)
+            {
+                bIsOutside = true;
+            }
+            else if (Col == 0 && MouseAbs.X < SlotTopLeft.X - Padding - Buffer)
+            {
+                bIsOutside = true;
+            }
+            else if (Col == MaxColumns - 1 && MouseAbs.X > SlotBotRight.X + Padding + Buffer)
+            {
+                bIsOutside = true;
+            }
+
+            if (bIsOutside)
+            {
+                // ───────────────────────────────────────────────────────────────
+                // 1) “Unparent” the slot’s icon by clearing only its USizeBox children,
+                //    making the slot appear empty without destroying the UBorder/SizeBox.
+                // ───────────────────────────────────────────────────────────────
+                UBorder* SlotBorder = ForegroundBorders[DraggedItemIndex];
+                if (SlotBorder)
+                {
+                    if (USizeBox* SizeBox = Cast<USizeBox>(SlotBorder->GetContent()))
+                    {
+                        SizeBox->ClearChildren();
+                    }
+                }
+
+                // 2) Mark that drag‐out has begun
+                bDragStarted = true;
+
+                // 3) Build the floating widget at the mouse position
+                if (Canvas)
+                {
+                    DraggedItemWidget = NewObject<UOverlay>(this);
+                    DraggedItemWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+                    // (a) Icon or blue square
+                    UImage* ItemImage = NewObject<UImage>(this);
+                    ItemImage->SetVisibility(ESlateVisibility::Visible);
+                    if (DraggedItem.Texture.IsValid())
+                    {
+                        ItemImage->SetBrushFromTexture(DraggedItem.Texture.Get());
+                    }
+                    else
+                    {
+                        ItemImage->SetColorAndOpacity(FLinearColor::Blue);
+                    }
+                    UOverlaySlot* ImgSlot = DraggedItemWidget->AddChildToOverlay(ItemImage);
+                    ImgSlot->SetHorizontalAlignment(HAlign_Fill);
+                    ImgSlot->SetVerticalAlignment(VAlign_Fill);
+
+                    // (b) Red index text
+                    UTextBlock* CounterText = NewObject<UTextBlock>(this);
+                    CounterText->SetVisibility(ESlateVisibility::Visible);
+                    CounterText->SetText(FText::AsNumber(DraggedItem.Index));
+                    CounterText->SetColorAndOpacity(FLinearColor::Red);
+                    CounterText->SetJustification(ETextJustify::Center);
+                    CounterText->SetFont(
+                        FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 20));
+                    UOverlaySlot* TxtSlot = DraggedItemWidget->AddChildToOverlay(CounterText);
+                    TxtSlot->SetHorizontalAlignment(HAlign_Center);
+                    TxtSlot->SetVerticalAlignment(VAlign_Center);
+
+                    if (UCanvasPanelSlot* WidgetSlot = Canvas->AddChildToCanvas(DraggedItemWidget))
+                    {
+                        WidgetSlot->SetSize(FVector2D(100.0f, 100.0f));
+                        WidgetSlot->SetPosition(CurrentPosition - FVector2D(50.0f, 50.0f));
+                        WidgetSlot->SetZOrder(100);
+                    }
+                }
+
+                UE_LOG(LogTemp, Log, TEXT(
+                    "Drag started for item %d from slot %d"),
+                    DraggedItem.Index, DraggedItemIndex);
+            }
+        }
+
+        // If we are already dragging outside, update the floating widget’s position
+        if (bDragStarted && DraggedItemWidget && Canvas)
+        {
+            if (UCanvasPanelSlot* WidgetSlot = Cast<UCanvasPanelSlot>(DraggedItemWidget->Slot))
+            {
+                WidgetSlot->SetPosition(CurrentPosition - FVector2D(50.0f, 50.0f));
+            }
+        }
+
+        // Always call MoveItem even after pop‐out (to handle interior sorting)
+        MoveItem(InMouseEvent, /*bItemMovementStarted=*/ false, /*bItemMovementFinished=*/ false);
+        return FReply::Handled();
+    }
+
+    return FReply::Unhandled();
+}
+
+FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+    if (!bIsDragging)
+    {
+        return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+    }
+
+    // 1) Force a layout pass so that hit tests are accurate
+    if (Canvas) Canvas->ForceLayoutPrepass();
+    if (Grid)   Grid->ForceLayoutPrepass();
+    for (auto& CurrentBorder : ForegroundBorders)
+    {
+        if (CurrentBorder) CurrentBorder->ForceLayoutPrepass();
+    }
+
+    // 2) Figure out which slot (if any) the mouse is over now
+    const uint32 HoveredIndex = FindHoveredItemIndex(InMouseEvent);
+    UE_LOG(LogTemp, Warning, TEXT("OnMouseButtonUp: HoveredIndex = %u"), HoveredIndex);
+
+    // 3) Remove the floating widget if it exists
+    if (DraggedItemWidget && Canvas)
+    {
+        Canvas->RemoveChild(DraggedItemWidget);
+        DraggedItemWidget = nullptr;
+    }
+
+    // 4) Determine whether OriginalSlotIndex was on an edge of the grid
+    const uint32 OrigRow = OriginalSlotIndex / MaxColumns;
+    const uint32 OrigCol = OriginalSlotIndex % MaxColumns;
+    const bool bOriginalWasEdge =
+        (OrigRow == 0) ||
+        (OrigRow == MaxRows - 1) ||
+        (OrigCol == 0) ||
+        (OrigCol == MaxColumns - 1);
+
+    // 5) Check if mouse is still inside the grid’s bounding box
+    bool bMouseInsideGrid = false;
+    if (Grid)
+    {
+        const FGeometry GridGeom       = Grid->GetCachedGeometry();
+        const FVector2D TopLeft        = GridGeom.GetAbsolutePosition();
+        const FVector2D BottomRight    = TopLeft + GridGeom.GetAbsoluteSize();
+        const FVector2D MouseScreenPos = InMouseEvent.GetScreenSpacePosition();
+
+        bMouseInsideGrid =
+            MouseScreenPos.X >= TopLeft.X   && MouseScreenPos.X <= BottomRight.X &&
+            MouseScreenPos.Y >= TopLeft.Y   && MouseScreenPos.Y <= BottomRight.Y;
+    }
+
+    bool bHandled = false;
+
+    // ─────────────────────────────────────────────────────────────────────
+    // New interior‐move / swap / restore logic
+    // ─────────────────────────────────────────────────────────────────────
+    if (bMouseInsideGrid && HoveredIndex != INDEX_NONE && Items.IsValidIndex(HoveredIndex))
+    {
+        // === CASE A: the target slot is EMPTY (no WorldObjectReverence) ===
+        if (!Items[HoveredIndex].WorldObjectReverence)
+        {
+            // 1) Put the dragged item into the empty slot
+            Items[HoveredIndex] = DraggedItem;
+            UpdateSlotUI(HoveredIndex);
+
+            // 2) If the item was still in the inventory (not already popped out), remove it now
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+            // If bPendingRemoval == true, then the slot was already cleared when we popped out,
+            // so there’s nothing left to remove.
+
+            bHandled = true;
+        }
+        // === CASE B: dropped back onto the same slot we started from ===
+        else if (HoveredIndex == OriginalSlotIndex)
+        {
+            // 1) If we never removed from Items[] (bPendingRemoval == false), just restore in place.
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                Items[OriginalSlotIndex] = DraggedItem;
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+            // 2) If bPendingRemoval == true, that means the slot was cleared when we popped out.
+            //    To restore, we must re‐insert the dragged item back into OriginalSlotIndex now.
+            else if (bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                Items[OriginalSlotIndex] = DraggedItem;
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+
+            bHandled = true;
+        }
+        // === CASE C: target slot is occupied by a different item → SWAP ===
+        else
+        {
+            // Save the item that was in the hovered slot
+            FItem Temp = Items[HoveredIndex];
+
+            // Put the dragged item into HoveredIndex
+            Items[HoveredIndex] = DraggedItem;
+            UpdateSlotUI(HoveredIndex);
+
+            // Now decide where Temp goes
+            if (!bOriginalWasEdge && !bPendingRemoval)
+            {
+                // Interior drag & item was still in inventory: swap‐out goes back to the original slot
+                Items[OriginalSlotIndex] = Temp;
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+            else
+            {
+                // Edge‐drag OR item was already popped out (bPendingRemoval==true):
+                // Put Temp into the first empty slot, or back to OriginalSlotIndex if none found.
+                const uint32 FirstEmpty = FindFirstEmptySlot();
+                if (FirstEmpty != INDEX_NONE)
+                {
+                    Items[FirstEmpty] = Temp;
+                    UpdateSlotUI(FirstEmpty);
+                }
+                else if (OriginalSlotIndex != INDEX_NONE)
+                {
+                    // Only restore to OriginalSlotIndex if it wasn’t already re‐used
+                    Items[OriginalSlotIndex] = Temp;
+                    UpdateSlotUI(OriginalSlotIndex);
+                }
+            }
+
+            // If the dragged item was still in the inventory (bPendingRemoval == false),
+            // we now remove it from the old slot. If bPendingRemoval==true, that slot is already empty.
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+
+            bHandled = true;
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────
+    // 2) Dropped outside the grid but this was an interior drag → RESTORE
+    // ─────────────────────────────────────────────────────────────────
+    else if (!bOriginalWasEdge && !bPendingRemoval)
+    {
+        // Put the dragged item back into its original slot
+        if (OriginalSlotIndex != INDEX_NONE)
+        {
+            Items[OriginalSlotIndex] = DraggedItem;
+            UpdateSlotUI(OriginalSlotIndex);
+        }
+        bHandled = true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // CASE D “pop‐out” spawn logic (edge‐drag branch)
+    // Only runs if we haven’t already handled an interior drop
+    // and if the drag started on an edge OR is pending removal.
+    // ─────────────────────────────────────────────────────────────────
+    if (!bHandled)
+    {
+        UE_LOG(LogTemp, Log, TEXT("--- Entering pop‐out / edge‐drag branch ---"));
+
+        if (DraggedItem.StaticMesh.IsValid())
+        {
+            UE_LOG(LogTemp, Log, TEXT("Spawning actor with mesh: %s"), *DraggedItem.StaticMesh.ToString());
+        }
+        else if (DraggedItem.WorldObjectReverence)
+        {
+            UE_LOG(LogTemp, Log, TEXT("Spawning WorldObjectReverence: %s"), *DraggedItem.WorldObjectReverence->GetName());
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("DraggedItem has neither StaticMesh nor WorldObjectReverence"));
+        }
+
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            // Use the stored WorldObjectTransform (force scale = 1)
+            const FTransform& ItemTransform = DraggedItem.WorldObjectTransform;
+            const FVector      ItemLocation  = ItemTransform.GetLocation();
+            const FRotator     ItemRotation  = ItemTransform.GetRotation().Rotator();
+
+            UE_LOG(LogTemp, Log,
+                TEXT("DraggedItem.WorldObjectTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f)"),
+                ItemLocation.X, ItemLocation.Y, ItemLocation.Z,
+                ItemRotation.Pitch, ItemRotation.Yaw, ItemRotation.Roll);
+
+            // Draw a debug sphere so you see where it spawns
+            DrawDebugSphere(World, ItemLocation, 25.0f, 12, FColor::Blue, false, 5.0f);
+
+            // Set up a spawn transform with unit scale
+            FTransform SpawnTransform;
+            SpawnTransform.SetLocation(ItemLocation);
+            SpawnTransform.SetRotation(ItemTransform.GetRotation());
+            SpawnTransform.SetScale3D(ItemTransform.GetScale3D());
+
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.SpawnCollisionHandlingOverride =
+                ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+            // Spawn the AStaticMeshActor in the world
+            AStaticMeshActor* MeshActor =
+                World->SpawnActor<AStaticMeshActor>(
+                    AStaticMeshActor::StaticClass(),
+                    SpawnTransform,
+                    SpawnParams
+                );
+            MeshActor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+
+            // Assign the static mesh if it exists
+            if (DraggedItem.StaticMesh.IsValid())
+            {
+                UStaticMesh* LoadedMesh = DraggedItem.StaticMesh.LoadSynchronous();
+                if (LoadedMesh)
+                {
+                    MeshActor->GetStaticMeshComponent()->SetStaticMesh(LoadedMesh);
+                    UE_LOG(LogTemp, Log, TEXT("Assigned StaticMesh: %s"), *LoadedMesh->GetName());
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Failed to load StaticMesh."));
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("DraggedItem.StaticMesh is not valid."));
+            }
+
+            // Apply stored materials if any
+            if (MeshActor->GetStaticMeshComponent())
+            {
+                for (int32 Index = 0; Index < DraggedItem.StoredMaterials.Num(); ++Index)
+                {
+                    if (DraggedItem.StoredMaterials[Index].IsValid())
+                    {
+                        UMaterialInterface* Mat = DraggedItem.StoredMaterials[Index].LoadSynchronous();
+                        if (Mat)
+                        {
+                            MeshActor->GetStaticMeshComponent()->SetMaterial(Index, Mat);
+                            UE_LOG(LogTemp, Log,
+                                TEXT("Applied material to slot %d: %s"),
+                                Index, *Mat->GetName()
+                            );
+                        }
+                        else
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("Failed to load material at slot %d."), Index);
+                        }
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("Invalid material pointer at slot %d."), Index);
+                    }
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("No materials found for 'StaticMeshComponent'."));
+            }
+
+            // Remove from inventory *once* (if not already removed)
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+
+            // Mark that we've now popped out
+            bPendingRemoval = true;
+            bHandled = true;
+        }
+    }
+
+    // 6) Clear drag state & force a final redraw of all slots
+    bIsDragging       = false;
+    bDragStarted      = false;
+    bPendingRemoval   = false;   // reset for next drag
+    DraggedItem       = FItem();
+    DraggedItemIndex  = INDEX_NONE;
+    PreviousSlotIndex = INDEX_NONE;
+    OriginalSlotIndex = INDEX_NONE;
+
+    if (bHandled)
+    {
+        for (uint32 i = 0; i < static_cast<uint32>(Items.Num()); ++i)
+        {
+            UpdateSlotUI(i);
+        }
+    }
+
+    return FReply::Handled().ReleaseMouseCapture();
+}
+
+void UInventory::AddItem(AActor* ItemActor)
+{
+    if (!ItemActor) return;
+
+    // If the inventory is already full, do nothing.
+    if (ItemCounter >= static_cast<uint64>(MaxRows * MaxColumns))
+    {
+        bIsInventoryFull = true;
+        return;
+    }
+
+    // Find the first empty slot.
+    uint64 EmptySlotIndex = FindFirstEmptySlot();
+    if (EmptySlotIndex == INDEX_NONE)
+    {
+        bIsInventoryFull = true;
+        return;
+    }
+
+    // Populate a new FItem in that slot.
+    FItem& NewItem = Items[EmptySlotIndex];
+    NewItem = FItem();  // Reset to defaults.
+
+    // Store the actor class so we can spawn it later if needed.
+    NewItem.WorldObjectReverence = ItemActor->GetClass();
+
+    // Store the world transform at the moment of pickup.
+    NewItem.WorldObjectTransform = ItemActor->GetActorTransform();
+
+    // Store the index in the inventory.
+    NewItem.Index = ItemCounter;
+
+    // Attempt to grab the static mesh from the actor's components:
+    if (UStaticMeshComponent* MeshComp = ItemActor->FindComponentByClass<UStaticMeshComponent>())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Mesh Component Name: %s"), *MeshComp->GetFName().ToString());
+        if (MeshComp->GetStaticMesh())
+        {
+            // Save that mesh into our FItem so we can reassign it when spawning back into the world.
+            NewItem.StaticMesh = MeshComp->GetStaticMesh();
+            UE_LOG(LogTemp, Warning, TEXT("Sattic Mesh Name: %s"),  *NewItem.StaticMesh->GetName());
+        }
+        
+        for (int32 i = 0; i < MeshComp->GetNumMaterials(); ++i)
+        {
+            if (MeshComp->GetMaterial(i))
+            {
+                NewItem.StoredMaterials.Add(MeshComp->GetMaterial(i));
+            }
+        }
+    }
     
-    void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
-    
-    uint32 FindHoveredItemIndex(const FPointerEvent& InMouseEvent) const;
+    // Update the UI for this new slot.
+    UpdateSlotUI(EmptySlotIndex);
 
-protected:
-    uint32 MaxRows;
-    uint32 MaxColumns;
+    // Destroy the actor we just picked up.
+    ItemActor->Destroy();
 
-    UPROPERTY()
-    bool bIsInventoryFull;
+    // Increment counter and check if the inventory is now full.
+    ItemCounter++;
+    bIsInventoryFull = (FindFirstEmptySlot() == INDEX_NONE);
+}
 
-    UPROPERTY()
-    TArray<FItem> Items;
+void UInventory::RemoveItem(int32 SlotIndex)
+{
+    if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].WorldObjectReverence)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("RemoveItem: Invalid slot %d or no item to remove"), SlotIndex);
+        return;
+    }
 
-    UPROPERTY()
-    TArray<TObjectPtr<UBorder>> ForegroundBorders;
+    Items[SlotIndex] = FItem();
+    UpdateSlotUI(SlotIndex);   // <-- this ensures the slot is cleared visually
 
-    UPROPERTY()
-    TArray<TObjectPtr<USizeBox>> IconSlots;
+    if (ItemCounter > 0) ItemCounter--;
 
-    UPROPERTY()
-    TArray<bool> bCounterTextUpdated;
+    uint64 NewIndex = 0;
+    for (uint64 i = 0; i < static_cast<uint64>(Items.Num()); ++i)
+    {
+        if (Items[i].WorldObjectReverence)
+        {
+            Items[i].Index = NewIndex++;
+            CreateIconCounterText(i);
+        }
+    }
+    ItemCounter = NewIndex;
+    bIsInventoryFull = (FindFirstEmptySlot() == INDEX_NONE);
+}
 
-    UPROPERTY()
-    TObjectPtr<UCanvasPanel> Canvas;
+uint32 UInventory::FindHoveredItemIndex(const FPointerEvent& InMouseEvent) const
+{
+       if (!Grid || ForegroundBorders.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("FindHoveredItemIndex: Grid or ForegroundBorders invalid"));
+        return INDEX_NONE;
+    }
 
-    UPROPERTY()
-    TObjectPtr<UBorder> BackgroundBorder;
+    // Ensure parent/layout geometry is up to date
+    if (Canvas) Canvas->ForceLayoutPrepass();
+    if (Grid)   Grid->ForceLayoutPrepass();
+    for (TObjectPtr<UBorder> Border : ForegroundBorders)
+    {
+        if (Border) Border->ForceLayoutPrepass();
+    }
 
-    UPROPERTY()
-    TObjectPtr<UCanvasPanelSlot> BackgroundBorderSlot;
+    const FVector2D MousePos = InMouseEvent.GetScreenSpacePosition();
+    uint64 ClosestIndex = INDEX_NONE;
+    float   MinDistance  = FLT_MAX;
+    bool    bAnyValidGeometry = false;
 
-    UPROPERTY()
-    TObjectPtr<UTextBlock> Title;
+    // Loop over every slot; use the one whose bounding box contains MousePos,
+    // pick the closest center if multiple overlap.
+    for (uint64 Row = 0; Row < MaxRows; ++Row)
+    {
+        for (uint64 Col = 0; Col < MaxColumns; ++Col)
+        {
+            const uint64 Index = Row * MaxColumns + Col;
 
-    UPROPERTY()
-    TObjectPtr<UUniformGridPanel> Grid;
+            if (!ForegroundBorders.IsValidIndex(Index) || !ForegroundBorders[Index])
+            {
+                UE_LOG(LogTemp, Warning, TEXT(
+                    "FindHoveredItemIndex: Slot %llu invalid or null"), Index);
+                continue;
+            }
 
-    UPROPERTY()
-    UUniformGridSlot* GridSlot;
+            // Get the absolute geometry of this slot
+            const FGeometry SlotGeometry       = ForegroundBorders[Index]->GetCachedGeometry();
+            const FVector2D SlotAbsTopLeft      = SlotGeometry.LocalToAbsolute(FVector2D::ZeroVector);
+            const FVector2D SlotAbsSize         = SlotGeometry.GetLocalSize();
+            const FVector2D SlotAbsBottomRight  = SlotAbsTopLeft + SlotAbsSize;
 
-    UPROPERTY()
-    UOverlay* DraggedItemWidget;
+            UE_LOG(LogTemp, Log, TEXT(
+                "FindHoveredItemIndex: Slot %llu, TopLeft=%s, Size=%s, BottomRight=%s, MousePos=%s"),
+                Index,
+                *SlotAbsTopLeft.ToString(),
+                *SlotAbsSize.ToString(),
+                *SlotAbsBottomRight.ToString(),
+                *MousePos.ToString()
+            );
 
-    static uint32 ItemCounter;
+            if (SlotAbsSize.X < 10.0f || SlotAbsSize.Y < 10.0f)
+            {
+                UE_LOG(LogTemp, Warning, TEXT(
+                    "FindHoveredItemIndex: Slot %llu geometry too small: Size=%s"),
+                    Index, *SlotAbsSize.ToString());
+                continue;
+            }
 
-    // Dragging state
-    UPROPERTY()
-    bool bPendingRemoval;
+            bAnyValidGeometry = true;
 
-    UPROPERTY()
-    int32 DraggedItemIndex;
+            // Check if MousePos is inside this slot's rectangle
+            if (MousePos.X >= SlotAbsTopLeft.X && MousePos.X <= SlotAbsBottomRight.X &&
+                MousePos.Y >= SlotAbsTopLeft.Y && MousePos.Y <= SlotAbsBottomRight.Y)
+            {
+                // Compute center-based distance so that if two slots overlap (rare),
+                // we pick the closer center.
+                const FVector2D SlotCenter = SlotAbsTopLeft + (SlotAbsSize * 0.5f);
+                const float     Distance   = FVector2D::Distance(MousePos, SlotCenter);
 
-    UPROPERTY()
-    int32 OriginalSlotIndex;
+                if (Distance < MinDistance)
+                {
+                    MinDistance    = Distance;
+                    ClosestIndex   = Index;
+                    UE_LOG(LogTemp, Log, TEXT(
+                        "FindHoveredItemIndex: Slot %llu hit, Distance=%f"), Index, Distance);
+                }
+            }
+        }
+    }
 
-    UPROPERTY()
-    int32 PreviousSlotIndex;
+    if (ClosestIndex == INDEX_NONE)
+    {
+        UE_LOG(LogTemp, Warning, TEXT(
+            "FindHoveredItemIndex: No valid slot hit. AnyValidGeometry=%s, MousePos=%s"),
+            bAnyValidGeometry ? TEXT("True") : TEXT("False"),
+            *MousePos.ToString());
+    }
 
-    UPROPERTY()
-    FItem DraggedItem;
+    return static_cast<uint32>(ClosestIndex);
+}
 
-    UPROPERTY()
-    bool bIsDragging;
+void UInventory::MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished)
+{
+    if (!bIsDragging)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("MoveItem: Not dragging, exiting"));
+        return;
+    }
 
-    UPROPERTY()
-    bool bDragStarted;
+    uint64 HoveredIndex = FindHoveredItemIndex(MouseEvent);
+    UE_LOG(LogTemp, Log, TEXT("MoveItem: HoveredIndex=%d, OriginalSlotIndex=%d, DraggedItemIndex=%d"),
+        HoveredIndex, OriginalSlotIndex, DraggedItemIndex);
 
-    UPROPERTY()
-    FVector2D DragStartPosition;
+    if (HoveredIndex == INDEX_NONE || !Items.IsValidIndex(HoveredIndex))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("MoveItem: Invalid HoveredIndex=%d or out of bounds"), HoveredIndex);
+        return;
+    }
 
-    // Sliding animation state
-    UPROPERTY()
-    bool bIsSliding;
+    PreviousSlotIndex = HoveredIndex;
 
-    UPROPERTY()
-    int32 SlideFromIndex;
+    if (HoveredIndex == OriginalSlotIndex)
+    {
+        UE_LOG(LogTemp, Log, TEXT("MoveItem: HoveredIndex same as OriginalSlotIndex, skipping"));
+        return;
+    }
 
-    UPROPERTY()
-    int32 SlideToIndex;
+    uint64 FromRow = OriginalSlotIndex / MaxColumns;
+    uint64 FromCol = OriginalSlotIndex % MaxColumns;
+    uint64 ToRow = HoveredIndex / MaxColumns;
+    uint64 ToCol = HoveredIndex % MaxColumns;
+    EDirection Direction = GetMoveDirection(FromRow, FromCol, ToRow, ToCol);
+    UE_LOG(LogTemp, Log, TEXT("MoveItem: Moving from (%d,%d) to (%d,%d), Direction=%d"),
+        FromRow, FromCol, ToRow, ToCol, (uint8)Direction);
 
-    UPROPERTY()
-    float SlideProgress;
+    if (Items[HoveredIndex].WorldObjectReverence)
+    {
+        FItem TempItem = Items[HoveredIndex];
+        Items[HoveredIndex] = DraggedItem;
+        Items[OriginalSlotIndex] = TempItem;
+        UpdateSlotUI(OriginalSlotIndex);
+        UpdateSlotUI(HoveredIndex);
+        UE_LOG(LogTemp, Log, TEXT("MoveItem: Swapped item %d with item in slot %d"), DraggedItem.Index, HoveredIndex);
+    }
+    else
+    {
+        Items[HoveredIndex] = DraggedItem;
+        Items[OriginalSlotIndex] = FItem();
+        UpdateSlotUI(OriginalSlotIndex);
+        UpdateSlotUI(HoveredIndex);
+        UE_LOG(LogTemp, Log, TEXT("MoveItem: Moved item %d to empty slot %d"), DraggedItem.Index, HoveredIndex);
+    }
 
-    UPROPERTY()
-    float SlideDuration;
+    DraggedItemIndex = HoveredIndex;
+    OriginalSlotIndex = HoveredIndex;
 
-    UPROPERTY()
-    FItem SlidingItem;
+    if (Grid) Grid->ForceLayoutPrepass();
+    if (Canvas) Canvas->ForceLayoutPrepass();
+}
 
-    UPROPERTY()
-    TArray<TObjectPtr<UOverlay>> SlidingOverlays;
+EDirection UInventory::GetMoveDirection(uint32 RowA, uint32 ColA, uint32 RowB, uint32 ColB) const
+{
+    if (RowA == RowB && ColA < ColB) return EDirection::Right;
+    if (RowA == RowB && ColA > ColB) return EDirection::Left;
+    if (ColA == ColB && RowA < RowB) return EDirection::Down;
+    if (ColA == ColB && RowA > RowB) return EDirection::Up;
+    return EDirection::None;
+}
 
-    UPROPERTY()
-    TArray<int32> SlideFromIndices;
+void UInventory::UpdateSlotUI(uint32 SlotIndex)
+{
+    if (!Items.IsValidIndex(SlotIndex) || !ForegroundBorders.IsValidIndex(SlotIndex))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UpdateSlotUI: Invalid SlotIndex=%d"), SlotIndex);
+        return;
+    }
 
-    UPROPERTY()
-    TArray<int32> SlideToIndices;
+    UBorder* SlotBorder = ForegroundBorders[SlotIndex];
+    if (!SlotBorder) return;
 
-    UPROPERTY()
-    TArray<FItem> SlidingItems;
+    // We assume each UBorder’s content is always a USizeBox that we clear and repopulate.
+    USizeBox* SizeBox = Cast<USizeBox>(SlotBorder->GetContent());
+    if (!SizeBox) return;
 
-    UPROPERTY()
-    bool bAnimationScheduled;
+    // 1) If dragging from an edge and this is the original slot, clear its icon but leave the border intact.
+    if (bIsDragging && bDragStarted && SlotIndex == OriginalSlotIndex)
+    {
+        SizeBox->ClearChildren();
+        return;
+    }
 
-    UPROPERTY()
-    int32 ScheduledFromIndex;
+    // 2) Otherwise, clear everything and redraw the actual item icon (with its red index) if present.
+    SizeBox->ClearChildren();
 
-    UPROPERTY()
-    int32 ScheduledToIndex;
+    if (Items[SlotIndex].WorldObjectReverence)
+    {
+        CreateItemIcon(SlotIndex);
+        CreateIconCounterText(SlotIndex);
+    }
+    // else: leave blank
 
-    UPROPERTY()
-    EDirection ScheduledDirection;
+    SlotBorder->SetVisibility(ESlateVisibility::Visible);
+    SlotBorder->ForceLayoutPrepass();
 
-    UPROPERTY()
-    bool bHasReindexedOnPopOut;
+    UE_LOG(LogTemp, Log, TEXT(
+        "UpdateSlotUI: Slot %d border updated, HasItem=%s"),
+        SlotIndex,
+        Items[SlotIndex].WorldObjectReverence ? TEXT("True") : TEXT("False"));
+}
 
-    UPROPERTY()
-    uint32 MoveCount;
+void UInventory::CreateItemIcon(uint32 SlotIndex)
+{
+    if (!Items.IsValidIndex(SlotIndex) || !ForegroundBorders.IsValidIndex(SlotIndex)) return;
 
-    void Create();
-    void UpdateSlotUI(uint32 SlotIndex);
-    void RemoveItemIcon(uint32 SlotIndex);
-    void CreateItemIcon(uint32 SlotIndex);
-    void CreateIconCounterText(uint32 SlotIndex);
-    uint32 FindFirstEmptySlot() const;
-    EDirection GetMoveDirection(uint32 RowA, uint32 ColA, uint32 RowB, uint32 ColB) const;
-    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
-    uint32 FindItemIndex(const FItem& TargetItem) const;
-    void ScheduleSlideAnimation(uint32 FromIndex, uint32 ToIndex, EDirection Direction);
-    FVector2D GetSlotPosition(uint32 SlotIndex) const;
-    float CustomEaseInOut(float T) const;
-};
+    TObjectPtr<USizeBox> SizeBox = Cast<USizeBox>(ForegroundBorders[SlotIndex]->GetContent());
+    if (!SizeBox) return;
+
+    SizeBox->ClearChildren();
+
+    UOverlay* IconOverlay = NewObject<UOverlay>(this);
+    IconOverlay->SetVisibility(ESlateVisibility::Visible);
+    SizeBox->SetContent(IconOverlay);
+
+    UImage* ItemIcon = NewObject<UImage>(this);
+    ItemIcon->SetVisibility(ESlateVisibility::Visible);
+    UOverlaySlot* ImageSlot = IconOverlay->AddChildToOverlay(ItemIcon);
+    ImageSlot->SetHorizontalAlignment(HAlign_Fill);
+    ImageSlot->SetVerticalAlignment(VAlign_Fill);
+
+    if (Items[SlotIndex].Texture.IsValid())
+    {
+        ItemIcon->SetBrushFromTexture(Items[SlotIndex].Texture.Get());
+    }
+    else
+    {
+        ItemIcon->SetColorAndOpacity(FLinearColor::Blue);
+    }
+}
+
+void UInventory::CreateIconCounterText(uint32 SlotIndex)
+{
+    if (!ForegroundBorders.IsValidIndex(SlotIndex) || !Items.IsValidIndex(SlotIndex)) return;
+    if (!Items[SlotIndex].WorldObjectReverence) return;
+
+    TObjectPtr<USizeBox> SizeBox = Cast<USizeBox>(ForegroundBorders[SlotIndex]->GetContent());
+    if (!SizeBox) return;
+
+    UOverlay* IconOverlay = Cast<UOverlay>(SizeBox->GetContent());
+    if (!IconOverlay)
+    {
+        IconOverlay = NewObject<UOverlay>(this);
+        IconOverlay->SetVisibility(ESlateVisibility::Visible);
+        SizeBox->SetContent(IconOverlay);
+    }
+
+    UTextBlock* ItemCounterText = nullptr;
+    for (int32 i = 0; i < IconOverlay->GetChildrenCount(); ++i)
+    {
+        if (UTextBlock* Text = Cast<UTextBlock>(IconOverlay->GetChildAt(i)))
+        {
+            ItemCounterText = Text;
+            break;
+        }
+    }
+
+    if (!ItemCounterText)
+    {
+        ItemCounterText = NewObject<UTextBlock>(this);
+        ItemCounterText->SetVisibility(ESlateVisibility::Visible);
+        UOverlaySlot* TextOverlaySlot = IconOverlay->AddChildToOverlay(ItemCounterText);
+        TextOverlaySlot->SetHorizontalAlignment(HAlign_Center);
+        TextOverlaySlot->SetVerticalAlignment(VAlign_Center);
+    }
+
+    ItemCounterText->SetText(FText::AsNumber(Items[SlotIndex].Index));
+    ItemCounterText->SetColorAndOpacity(FLinearColor::Red);
+    ItemCounterText->SetJustification(ETextJustify::Center);
+    ItemCounterText->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", 20));
+}
+
+uint32 UInventory::FindFirstEmptySlot() const
+{
+    for (uint64 i = 0; i < static_cast<uint64>(Items.Num()); i++)
+    {
+        if (!Items[i].WorldObjectReverence) return i;
+    }
+    return INDEX_NONE;
+}
+
+void UInventory::RemoveItemIcon(uint32 SlotIndex)
+{
+    if (ForegroundBorders.IsValidIndex(SlotIndex))
+    {
+        if (TObjectPtr<USizeBox> SizeBox = Cast<USizeBox>(ForegroundBorders[SlotIndex]->GetContent()))
+        {
+            SizeBox->ClearChildren();
+            SizeBox->ForceLayoutPrepass();
+        }
+    }
+}
+
+void UInventory::Create()
+{
+    if (!Grid || !WidgetTree) return;
+
+    Grid->ClearChildren();
+    ForegroundBorders.Empty();
+    Items.Empty();
+
+    Items.SetNum(MaxRows * MaxColumns);
+    ForegroundBorders.SetNum(MaxRows * MaxColumns);
+
+    for (uint64 Rows = 0; Rows < MaxRows; Rows++)
+    {
+        for (uint64 Columns = 0; Columns < MaxColumns; Columns++)
+        {
+            uint64 Index = Rows * MaxColumns + Columns;
+
+            UBorder* SlotBorder = NewObject<UBorder>(this);
+            SlotBorder->SetBrushColor(FLinearColor(0.1f, 0.1f, 0.1f, 1.0f));
+            SlotBorder->SetVisibility(ESlateVisibility::Visible);
+
+            USizeBox* SizeBox = NewObject<USizeBox>(this);
+            SizeBox->SetWidthOverride(100.0f);
+            SizeBox->SetHeightOverride(100.0f);
+
+            SlotBorder->SetContent(SizeBox);
+            GridSlot = Grid->AddChildToUniformGrid(SlotBorder, Rows, Columns);
+            GridSlot->SetHorizontalAlignment(HAlign_Center);
+            GridSlot->SetVerticalAlignment(VAlign_Center);
+
+            ForegroundBorders[Index] = SlotBorder;
+            SlotBorder->ForceLayoutPrepass();
+            SizeBox->ForceLayoutPrepass();
+        }
+    }
+
+    if (Grid) Grid->ForceLayoutPrepass();
+}
+
+void UInventory::Open()
+{
+    SetVisibility(ESlateVisibility::Visible);
+}
+
+void UInventory::Close()
+{
+    SetVisibility(ESlateVisibility::Collapsed);
+}
+
+bool UInventory::GetIsInventoryFull() const
+{
+    return bIsInventoryFull;
+}
+
+const TArray<FItem>& UInventory::GetItems() const
+{
+    return Items;
+}
+
+TArray<UBorder*> UInventory::GetForegroundBorders() const
+{
+    TArray<UBorder*> RawBorders;
+    for (TObjectPtr<UBorder> Border : ForegroundBorders)
+    {
+        RawBorders.Add(Border.Get());
+    }
+    return RawBorders;
+}
+
+UUniformGridPanel* UInventory::GetGrid() const
+{
+    return Grid.Get();
+}
+
+EDirection UInventory::SortItem(FItem& MovedItem, FItem& ItemToMove)
+{
+    return EDirection::None;
+}
+
+uint32 UInventory::FindItemIndex(const FItem& TargetItem) const
+{
+    return INDEX_NONE;
+}
+
+void UInventory::ScheduleSlideAnimation(uint32 FromIndex, uint32 ToIndex, EDirection Direction)
+{
+    ScheduledFromIndex = FromIndex;
+    ScheduledToIndex = ToIndex;
+    ScheduledDirection = Direction;
+    bAnimationScheduled = true;
+}
+
+FVector2D UInventory::GetSlotPosition(uint32 SlotIndex) const
+{
+    if (ForegroundBorders.IsValidIndex(SlotIndex) && ForegroundBorders[SlotIndex])
+    {
+        FGeometry SlotGeometry = ForegroundBorders[SlotIndex]->GetCachedGeometry();
+        return SlotGeometry.LocalToAbsolute(FVector2D::ZeroVector);
+    }
+    return FVector2D::ZeroVector;
+}
+
+float UInventory::CustomEaseInOut(float T) const
+{
+    return T < 0.5f ? 2.0f * T * T : -1.0f + (4.0f - 2.0f * T) * T;
+}
