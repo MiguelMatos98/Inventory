@@ -1,35 +1,37 @@
 #include "Inventory.h"
 
+// Initialization of static member
 uint32 UInventory::ItemCounter = 0;
 
 UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
-    : Super(ObjectInitializer)
- ,MaxRows(3)
- , MaxColumns(4)
- , bIsInventoryFull(false)
- , DraggedItemWidget(nullptr)
- , bPendingRemoval(false)
- , DraggedItemIndex(INDEX_NONE)
- , OriginalSlotIndex(INDEX_NONE)
- , PreviousSlotIndex(INDEX_NONE)
- , bIsDragging(false)
- , bDragStarted(false)
- , DragStartPosition(FVector2D::ZeroVector)
- , bIsSliding(false)
- , SlideFromIndex(INDEX_NONE)
- , SlideToIndex(INDEX_NONE)
- , SlideProgress(0.0f)
- , SlideDuration(0.2f)
- , bAnimationScheduled(false)
- , ScheduledFromIndex(INDEX_NONE)
- , ScheduledToIndex(INDEX_NONE)
- , ScheduledDirection(EDirection::None)
- , MoveCount(0)
+    : Super(ObjectInitializer),
+      MaxRows(3),
+      MaxColumns(4),
+      bIsInventoryFull(false),
+      GridSlot(nullptr),
+      DraggedItemWidget(nullptr),
+      bPendingRemoval(false),
+      DraggedItemIndex(INDEX_NONE),
+      OriginalSlotIndex(INDEX_NONE), 
+      PreviousSlotIndex(INDEX_NONE),
+      bIsDragging(false),
+      bDragStarted(false),
+      DragStartPosition(FVector2D::ZeroVector),
+      bIsSliding(false),
+      SlideFromIndex(INDEX_NONE),
+      SlideToIndex(INDEX_NONE),
+      SlideProgress(0.0f),
+      SlideDuration(0.2f),
+      bAnimationScheduled(false),
+      ScheduledFromIndex(INDEX_NONE),
+      ScheduledToIndex(INDEX_NONE),
+      ScheduledDirection(EDirection::None),
+      bHasReindexedOnPopOut(false),
+      MoveCount(0)
 {
+    // Setting member arrays size 
     Items.SetNum(MaxRows * MaxColumns);
     ForegroundBorders.SetNum(MaxRows * MaxColumns);
-    IconSlots.SetNum(MaxRows * MaxColumns);
-    bCounterTextUpdated.SetNum(MaxRows * MaxColumns);
 }
 
 void UInventory::NativeOnInitialized()
@@ -429,73 +431,111 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
     // ─────────────────────────────────────────────────────────────────────
     if (bMouseInsideGrid && HoveredIndex != INDEX_NONE && Items.IsValidIndex(HoveredIndex))
     {
-        // Dropped onto a valid slot inside the grid
+        // === CASE A: the target slot is EMPTY (no WorldObjectReverence) ===
         if (!Items[HoveredIndex].WorldObjectReverence)
         {
-            // 1) Target slot is empty → move there
-            Items[HoveredIndex]      = DraggedItem;
-            Items[OriginalSlotIndex] = FItem();
-
+            // 1) Put the dragged item into the empty slot
+            Items[HoveredIndex] = DraggedItem;
             UpdateSlotUI(HoveredIndex);
-            UpdateSlotUI(OriginalSlotIndex);
+
+            // 2) If the item was still in the inventory (not already popped out), remove it now
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+            // If bPendingRemoval == true, then the slot was already cleared when we popped out,
+            // so there’s nothing left to remove.
+
+            bHandled = true;
         }
+        // === CASE B: dropped back onto the same slot we started from ===
         else if (HoveredIndex == OriginalSlotIndex)
         {
-            // 2) Dropped back onto the same slot → restore it
-            Items[OriginalSlotIndex] = DraggedItem;
-            UpdateSlotUI(OriginalSlotIndex);
+            // 1) If we never removed from Items[] (bPendingRemoval == false), just restore in place.
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                Items[OriginalSlotIndex] = DraggedItem;
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+            // 2) If bPendingRemoval == true, that means the slot was cleared when we popped out.
+            //    To restore, we must re‐insert the dragged item back into OriginalSlotIndex now.
+            else if (bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                Items[OriginalSlotIndex] = DraggedItem;
+                UpdateSlotUI(OriginalSlotIndex);
+            }
+
+            bHandled = true;
         }
+        // === CASE C: target slot is occupied by a different item → SWAP ===
         else
         {
-            // 3) Target slot occupied → swap
+            // Save the item that was in the hovered slot
             FItem Temp = Items[HoveredIndex];
-            Items[HoveredIndex] = DraggedItem;
 
+            // Put the dragged item into HoveredIndex
+            Items[HoveredIndex] = DraggedItem;
+            UpdateSlotUI(HoveredIndex);
+
+            // Now decide where Temp goes
             if (!bOriginalWasEdge && !bPendingRemoval)
             {
-                // Interior drag: put the swapped‐out item back to original
+                // Interior drag & item was still in inventory: swap‐out goes back to the original slot
                 Items[OriginalSlotIndex] = Temp;
                 UpdateSlotUI(OriginalSlotIndex);
             }
             else
             {
-                // Edge drag: move the swapped‐out item to the first empty, or restore
+                // Edge‐drag OR item was already popped out (bPendingRemoval==true):
+                // Put Temp into the first empty slot, or back to OriginalSlotIndex if none found.
                 const uint32 FirstEmpty = FindFirstEmptySlot();
                 if (FirstEmpty != INDEX_NONE)
                 {
                     Items[FirstEmpty] = Temp;
                     UpdateSlotUI(FirstEmpty);
                 }
-                else
+                else if (OriginalSlotIndex != INDEX_NONE)
                 {
-                    // No empty left → restore it back to original
+                    // Only restore to OriginalSlotIndex if it wasn’t already re‐used
                     Items[OriginalSlotIndex] = Temp;
                     UpdateSlotUI(OriginalSlotIndex);
                 }
             }
 
-            UpdateSlotUI(HoveredIndex);
-        }
+            // If the dragged item was still in the inventory (bPendingRemoval == false),
+            // we now remove it from the old slot. If bPendingRemoval==true, that slot is already empty.
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+            }
 
-        bHandled = true;
+            bHandled = true;
+        }
     }
+    // ─────────────────────────────────────────────────────────────────
+    // 2) Dropped outside the grid but this was an interior drag → RESTORE
+    // ─────────────────────────────────────────────────────────────────
     else if (!bOriginalWasEdge && !bPendingRemoval)
     {
-        // Dropped outside the grid on an interior drag → restore
-        Items[OriginalSlotIndex] = DraggedItem;
-        UpdateSlotUI(OriginalSlotIndex);
-
+        // Put the dragged item back into its original slot
+        if (OriginalSlotIndex != INDEX_NONE)
+        {
+            Items[OriginalSlotIndex] = DraggedItem;
+            UpdateSlotUI(OriginalSlotIndex);
+        }
         bHandled = true;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // CASE B “pop‑out” spawn logic (unchanged)
+    // ─────────────────────────────────────────────────────────────────
+    // CASE D “pop‐out” spawn logic (edge‐drag branch)
     // Only runs if we haven’t already handled an interior drop
-    // and if the drag started on an edge or is pending removal.
-    // ─────────────────────────────────────────────────────────────────────
+    // and if the drag started on an edge OR is pending removal.
+    // ─────────────────────────────────────────────────────────────────
     if (!bHandled)
     {
-        UE_LOG(LogTemp, Log, TEXT("--- Entering spawn section (edge-drag branch) ---"));
+        UE_LOG(LogTemp, Log, TEXT("--- Entering pop‐out / edge‐drag branch ---"));
 
         if (DraggedItem.StaticMesh.IsValid())
         {
@@ -515,8 +555,8 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
         {
             // Use the stored WorldObjectTransform (force scale = 1)
             const FTransform& ItemTransform = DraggedItem.WorldObjectTransform;
-            const FVector ItemLocation      = ItemTransform.GetLocation();
-            const FRotator ItemRotation     = ItemTransform.GetRotation().Rotator();
+            const FVector      ItemLocation  = ItemTransform.GetLocation();
+            const FRotator     ItemRotation  = ItemTransform.GetRotation().Rotator();
 
             UE_LOG(LogTemp, Log,
                 TEXT("DraggedItem.WorldObjectTransform → Location=(%.3f, %.3f, %.3f), Rotation=(%.3f, %.3f, %.3f)"),
@@ -536,9 +576,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
             SpawnParams.SpawnCollisionHandlingOverride =
                 ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-            //
-            // Spawn exactly one actor (either the saved WorldObjectReverence or a generic AActor)
-            //
+            // Spawn the AStaticMeshActor in the world
             AStaticMeshActor* MeshActor =
                 World->SpawnActor<AStaticMeshActor>(
                     AStaticMeshActor::StaticClass(),
@@ -547,7 +585,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
                 );
             MeshActor->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
 
-            // Assign the static mesh
+            // Assign the static mesh if it exists
             if (DraggedItem.StaticMesh.IsValid())
             {
                 UStaticMesh* LoadedMesh = DraggedItem.StaticMesh.LoadSynchronous();
@@ -566,7 +604,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
                 UE_LOG(LogTemp, Warning, TEXT("DraggedItem.StaticMesh is not valid."));
             }
 
-            // Apply stored materials
+            // Apply stored materials if any
             if (MeshActor->GetStaticMeshComponent())
             {
                 for (int32 Index = 0; Index < DraggedItem.StoredMaterials.Num(); ++Index)
@@ -598,10 +636,15 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
                 UE_LOG(LogTemp, Warning, TEXT("No materials found for 'StaticMeshComponent'."));
             }
 
-            // Finally, remove from inventory and update UI
-            RemoveItem(OriginalSlotIndex);
-            UpdateSlotUI(OriginalSlotIndex);
+            // Remove from inventory *once* (if not already removed)
+            if (!bPendingRemoval && OriginalSlotIndex != INDEX_NONE)
+            {
+                RemoveItem(OriginalSlotIndex);
+                UpdateSlotUI(OriginalSlotIndex);
+            }
 
+            // Mark that we've now popped out
+            bPendingRemoval = true;
             bHandled = true;
         }
     }
@@ -609,7 +652,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
     // 6) Clear drag state & force a final redraw of all slots
     bIsDragging       = false;
     bDragStarted      = false;
-    bPendingRemoval   = false;
+    bPendingRemoval   = false;   // reset for next drag
     DraggedItem       = FItem();
     DraggedItemIndex  = INDEX_NONE;
     PreviousSlotIndex = INDEX_NONE;
@@ -1013,14 +1056,10 @@ void UInventory::Create()
 
     Grid->ClearChildren();
     ForegroundBorders.Empty();
-    IconSlots.Empty();
     Items.Empty();
-    bCounterTextUpdated.Empty();
 
     Items.SetNum(MaxRows * MaxColumns);
     ForegroundBorders.SetNum(MaxRows * MaxColumns);
-    IconSlots.SetNum(MaxRows * MaxColumns);
-    bCounterTextUpdated.Init(false, MaxRows * MaxColumns);
 
     for (uint64 Rows = 0; Rows < MaxRows; Rows++)
     {
@@ -1042,7 +1081,6 @@ void UInventory::Create()
             GridSlot->SetVerticalAlignment(VAlign_Center);
 
             ForegroundBorders[Index] = SlotBorder;
-            IconSlots[Index] = SizeBox;
             SlotBorder->ForceLayoutPrepass();
             SizeBox->ForceLayoutPrepass();
         }
