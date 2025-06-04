@@ -41,9 +41,13 @@ public:
     // Default Constructor
     UInventory(const FObjectInitializer& ObjectInitializer);
 
-    // Native Methods
+    // Native Method For Creating The Inventory UI
     virtual void NativeOnInitialized() override;
+
+    // Native Method For Reconstructing Slate Geometry 
     virtual void NativeConstruct() override;
+
+    // Native Method For Updating Inventory UI
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -161,18 +165,6 @@ private:
     FItem SlidingItem;
 
     UPROPERTY()
-    TArray<TObjectPtr<UOverlay>> SlidingOverlays;
-
-    UPROPERTY()
-    TArray<int32> SlideFromIndices;
-
-    UPROPERTY()
-    TArray<int32> SlideToIndices;
-
-    UPROPERTY()
-    TArray<FItem> SlidingItems;
-
-    UPROPERTY()
     bool bAnimationScheduled;
 
     UPROPERTY()
@@ -184,12 +176,6 @@ private:
     UPROPERTY()
     EDirection ScheduledDirection;
 
-    UPROPERTY()
-    bool bHasReindexedOnPopOut;
-
-    UPROPERTY()
-    uint32 MoveCount;
-
     void Create();
     void UpdateSlotUI(uint32 SlotIndex);
     void RemoveItemIcon(uint32 SlotIndex);
@@ -197,9 +183,5 @@ private:
     void CreateIconCounterText(uint32 SlotIndex);
     uint32 FindFirstEmptySlot() const;
     EDirection GetMoveDirection(uint32 RowA, uint32 ColA, uint32 RowB, uint32 ColB) const;
-    EDirection SortItem(FItem& MovedItem, FItem& ItemToMove);
-    uint32 FindItemIndex(const FItem& TargetItem) const;
-    void ScheduleSlideAnimation(uint32 FromIndex, uint32 ToIndex, EDirection Direction);
     FVector2D GetSlotPosition(uint32 SlotIndex) const;
-    float CustomEaseInOut(float T) const;
 };
