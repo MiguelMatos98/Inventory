@@ -1,6 +1,6 @@
 #include "Inventory.h"
 
-// Initialization of static member
+// Initialization Of Static Member
 uint32 UInventory::ItemCounter = 0;
 
 UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
@@ -8,12 +8,18 @@ UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
       MaxRows(3),
       MaxColumns(4),
       bIsInventoryFull(false),
+      Canvas(nullptr),
+      BackgroundBorder(nullptr),
+      BackgroundBorderSlot(nullptr),
+      Title(nullptr),
+      Grid(nullptr),
       GridSlot(nullptr),
       DraggedItemWidget(nullptr),
       bPendingRemoval(false),
       DraggedItemIndex(INDEX_NONE),
-      OriginalSlotIndex(INDEX_NONE), 
+      OriginalSlotIndex(INDEX_NONE),
       PreviousSlotIndex(INDEX_NONE),
+      DraggedItem(FItem()),
       bIsDragging(false),
       bDragStarted(false),
       DragStartPosition(FVector2D::ZeroVector),
@@ -22,99 +28,86 @@ UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
       SlideToIndex(INDEX_NONE),
       SlideProgress(0.0f),
       SlideDuration(0.2f),
+      SlidingItem(FItem()),
       bAnimationScheduled(false),
       ScheduledFromIndex(INDEX_NONE),
       ScheduledToIndex(INDEX_NONE),
-      ScheduledDirection(EDirection::None),
-      bHasReindexedOnPopOut(false),
-      MoveCount(0)
+      ScheduledDirection(EDirection::None)
 {
-    // Setting member arrays size 
+    // Setting Member Arrays Size 
     Items.SetNum(MaxRows * MaxColumns);
     ForegroundBorders.SetNum(MaxRows * MaxColumns);
+
+    // Resetting Item Index Back To Zero When the Player Starts To Play
+    ItemCounter = 0;
 }
 
 void UInventory::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
 
-    bIsInventoryFull = false;
-    DraggedItemIndex = INDEX_NONE;
-    OriginalSlotIndex = INDEX_NONE;
-    PreviousSlotIndex = INDEX_NONE;
-    bIsDragging = false;
-    bIsSliding = false;
-    SlideFromIndex = INDEX_NONE;
-    SlideToIndex = INDEX_NONE;
-    SlideProgress = 0.0f;
-    bAnimationScheduled = false;
-    ScheduledFromIndex = INDEX_NONE;
-    ScheduledToIndex = INDEX_NONE;
-    ScheduledDirection = EDirection::None;
-    MoveCount = 0;
-    bDragStarted = false;
-    DragStartPosition = FVector2D::ZeroVector;
-    ItemCounter = 0;
-
     if (!WidgetTree)
     {
-        UE_LOG(LogTemp, Warning, TEXT("WidgetTree is invalid"));
+        #if WITH_EDITOR
+        UE_LOG(LogTemp, Error, TEXT("WidgetTree is null"));
+        #else
+        UE_LOG(LogTemp, Fatal, TEXT("WidgetTree is null"));
+        #endif
+		
         return;
     }
 
+    // Creating Canvas 
     Canvas = NewObject<UCanvasPanel>(this);
+
+    // Assigning Canvas To Root Widget Under Widget Tree
     WidgetTree->RootWidget = Canvas;
 
+    // Creating Root VerticalBox To Hold Child Widgets
+    UVerticalBox* RootVerticalBox = NewObject<UVerticalBox>(this);
+    
+    // Creating Border for the background, Setting Its Color And Padding
     BackgroundBorder = NewObject<UBorder>(this);
     BackgroundBorder->SetBrushColor(FLinearColor::Gray);
-
+    BackgroundBorder->SetPadding(FMargin(7.5f, 0.0f, 7.5f, 0.0f));
+  
+    // Creating Title And Setting It to "Inventory"
     Title = NewObject<UTextBlock>(this);
     Title->SetText(FText::FromString(TEXT("Inventory")));
+    
+    // Creating Vertical Box And Setting Positioning/Alignment 
+    UVerticalBoxSlot* TitleVerticalBoxSlot = RootVerticalBox->AddChildToVerticalBox(Title);
+    TitleVerticalBoxSlot->SetHorizontalAlignment(HAlign_Center);
+    TitleVerticalBoxSlot->SetVerticalAlignment(VAlign_Top);
+    TitleVerticalBoxSlot->SetPadding(FMargin(10, 10, 10, 10));
 
-    UVerticalBox* ContentBox = NewObject<UVerticalBox>(this);
-    UVerticalBoxSlot* TitleBoxSlot = ContentBox->AddChildToVerticalBox(Title);
-    TitleBoxSlot->SetHorizontalAlignment(HAlign_Center);
-    TitleBoxSlot->SetVerticalAlignment(VAlign_Top);
-    TitleBoxSlot->SetPadding(FMargin(10, 10, 10, 10));
-
+    // Creating Grid And Setting Positioning/Alignment 
     Grid = NewObject<UUniformGridPanel>(this);
-    Grid->SetSlotPadding(FMargin(10, 10, 10, 10));
-    UVerticalBoxSlot* GridBoxSlot = ContentBox->AddChildToVerticalBox(Grid);
-    GridBoxSlot->SetHorizontalAlignment(HAlign_Fill);
-    GridBoxSlot->SetVerticalAlignment(VAlign_Fill);
-    GridBoxSlot->SetPadding(FMargin(10, 10, 10, 10));
+    Grid->SetSlotPadding(FMargin(7.0f, 7.0f, 7.0f, 7.0f));
+    UVerticalBoxSlot* GridVerticalBoxSlot = RootVerticalBox->AddChildToVerticalBox(Grid);
+    GridVerticalBoxSlot->SetHorizontalAlignment(HAlign_Fill);
+    GridVerticalBoxSlot->SetVerticalAlignment(VAlign_Fill);
 
-    BackgroundBorder->SetContent(ContentBox);
+    // Setting Background Border Content To What Has Been Added To THe Root Vertical Box
+    // And Setting BackgroundBorder Positioning/Alignment 
+    BackgroundBorder->SetContent(RootVerticalBox);
     BackgroundBorderSlot = Canvas->AddChildToCanvas(BackgroundBorder);
-    BackgroundBorderSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
-    BackgroundBorderSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+    BackgroundBorderSlot->SetAnchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f));
+    BackgroundBorderSlot->SetAlignment(FVector2D(1.0f, 0.0f));
 
-    // Set fixed background size to match the provided snippet
-    BackgroundBorderSlot->SetOffsets(FMargin(0, -100, 510.0f, 500.0f));
 
-    SetRenderScale(FVector2D(1.0f, 1.0f));
+    // Setting Offset Position and Scaling For Background Border 
+    BackgroundBorderSlot->SetOffsets(FMargin(-10.0f, 11.0f,485.0f, 419.0f));
+
+    // Call create method to colonize the inventory with slots
     Create();
-
-    if (GEngine && GEngine->GameViewport)
-    {
-        FVector2D ViewportSize;
-        GEngine->GameViewport->GetViewportSize(ViewportSize);
-        UE_LOG(LogTemp, Log, TEXT("Viewport Size: %s"), *ViewportSize.ToString());
-
-        if (BackgroundBorder)
-        {
-            FGeometry BorderGeometry = BackgroundBorder->GetCachedGeometry();
-            FVector2D BorderTopLeft = BorderGeometry.LocalToAbsolute(FVector2D::ZeroVector);
-            FVector2D BorderSize = BorderGeometry.GetLocalSize();
-            UE_LOG(LogTemp, Log, TEXT("BackgroundBorder: TopLeft=%s, Size=%s"), *BorderTopLeft.ToString(), *BorderSize.ToString());
-        }
-    }
 }
 
 void UInventory::NativeConstruct()
 {
     Super::NativeConstruct();
 
+    // Ensuring Each Widget Has Its Layout Updated Before Using Geometry-Dependent Properties
     if (BackgroundBorder) BackgroundBorder->ForceLayoutPrepass();
     if (Grid) Grid->ForceLayoutPrepass();
     if (Canvas) Canvas->ForceLayoutPrepass();
@@ -173,10 +166,6 @@ void UInventory::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
             SlideFromIndex = INDEX_NONE;
             SlideToIndex = INDEX_NONE;
             SlidingItem = FItem();
-            SlidingOverlays.Empty();
-            SlideFromIndices.Empty();
-            SlideToIndices.Empty();
-            SlidingItems.Empty();
 
             if (Grid) Grid->ForceLayoutPrepass();
             if (Canvas) Canvas->ForceLayoutPrepass();
@@ -1124,24 +1113,6 @@ UUniformGridPanel* UInventory::GetGrid() const
     return Grid.Get();
 }
 
-EDirection UInventory::SortItem(FItem& MovedItem, FItem& ItemToMove)
-{
-    return EDirection::None;
-}
-
-uint32 UInventory::FindItemIndex(const FItem& TargetItem) const
-{
-    return INDEX_NONE;
-}
-
-void UInventory::ScheduleSlideAnimation(uint32 FromIndex, uint32 ToIndex, EDirection Direction)
-{
-    ScheduledFromIndex = FromIndex;
-    ScheduledToIndex = ToIndex;
-    ScheduledDirection = Direction;
-    bAnimationScheduled = true;
-}
-
 FVector2D UInventory::GetSlotPosition(uint32 SlotIndex) const
 {
     if (ForegroundBorders.IsValidIndex(SlotIndex) && ForegroundBorders[SlotIndex])
@@ -1150,9 +1121,4 @@ FVector2D UInventory::GetSlotPosition(uint32 SlotIndex) const
         return SlotGeometry.LocalToAbsolute(FVector2D::ZeroVector);
     }
     return FVector2D::ZeroVector;
-}
-
-float UInventory::CustomEaseInOut(float T) const
-{
-    return T < 0.5f ? 2.0f * T * T : -1.0f + (4.0f - 2.0f * T) * T;
 }
