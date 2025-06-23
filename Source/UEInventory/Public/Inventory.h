@@ -22,14 +22,21 @@
 #include "Inventory.generated.h"
 
 // Direction enum created for setting Item movement
-UENUM(BlueprintType)
 enum class EDirection : uint8
 {
-    None,
+    Null,
     Up,
     Down,
     Left,
     Right
+};
+
+enum class EDragState : uint8
+{
+    Null,
+    Select,
+    Moved,
+    Released
 };
 
 UCLASS()
@@ -46,41 +53,31 @@ public:
     // NativeNativeConstruct used for reconstructing inventory Widgets 
     virtual void NativeConstruct() override;
 
-    // NativeOnMouseButtonDown used for storing item index, updating dragging states and store mouse position (Helpefull for later "Sorting...")
+    // NativeOnMouseButtonDown used for keeping track of the hovered slot, mouse position, drag state and dragged item 
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
     virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
     virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-    // Add Item Method
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void AddItem(AActor* ItemActor);
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void RemoveItem(int32 SlotIndex);
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
     void Open();
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
     void Close();
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void AddItem(AActor* ItemActor);
+
     bool GetIsInventoryFull() const;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
     const TArray<FItem>& GetItems() const;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    TArray<UBorder*> GetForegroundBorders() const;
+    TArray<TObjectPtr<UBorder>>  GetForegroundBorders() const;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    UUniformGridPanel* GetGrid() const;
+    TObjectPtr<UUniformGridPanel> GetGrid() const;
 
 private:
 
     uint32 MaxRows;
-    
+
     uint32 MaxColumns;
 
     UPROPERTY()
@@ -99,25 +96,25 @@ private:
     TObjectPtr<UBorder> BackgroundBorder;
 
     UPROPERTY()
-    TObjectPtr<UCanvasPanelSlot> BackgroundBorder_S;
+    TObjectPtr<UCanvasPanelSlot> BackgroundBorderSlot;
 
     UPROPERTY()
-    TObjectPtr<UVerticalBox> Background_VB;
+    TObjectPtr<UVerticalBox> BackgroundVerticalBox;
 
     UPROPERTY()
     TObjectPtr<UTextBlock> Title;
 
     UPROPERTY()
-    TObjectPtr<UVerticalBoxSlot> Title_VBS;
+    TObjectPtr<UVerticalBoxSlot> TitleVerticalBoxSlot;
 
     UPROPERTY()
     TObjectPtr<UUniformGridPanel> Grid;
 
     UPROPERTY()
-    TObjectPtr<UVerticalBoxSlot> Grid_VBS;
+    TObjectPtr<UVerticalBoxSlot> GridVerticalBoxSlot;
 
     UPROPERTY()
-    TObjectPtr<UUniformGridSlot> Grid_S;
+    TObjectPtr<UUniformGridSlot> GridSlot;
 
     UPROPERTY()
     TObjectPtr<UOverlay> DraggedItemWidget;
@@ -125,13 +122,10 @@ private:
     static uint32 ItemCounter;
 
     UPROPERTY()
-    bool bPendingRemoval;
+    int32 DragStartSlot;
 
     UPROPERTY()
-    int32 DraggedItemIndex;
-
-    UPROPERTY()
-    int32 OriginalSlotIndex;
+    int32 OriginalSlot;
 
     UPROPERTY()
     int32 PreviousSlotIndex;
@@ -140,55 +134,32 @@ private:
     FItem DraggedItem;
 
     UPROPERTY()
-    bool bIsItemDragging;
+    FVector2D MouseScreenSpacePosition;
 
     UPROPERTY()
-    bool bHasItemDragStarted;
+    FVector2D MouseWidgetLocalPosition;
 
-    UPROPERTY()
-    FVector2D MousePosition;
-
-    UPROPERTY()
-    bool bIsSliding;
-
-    UPROPERTY()
-    int32 SlideFromIndex;
-
-    UPROPERTY()
-    int32 SlideToIndex;
-
-    UPROPERTY()
-    float SlideProgress;
-
-    UPROPERTY()
-    float SlideDuration;
-
-    UPROPERTY()
-    FItem SlidingItem;
-
-    UPROPERTY()
-    int32 ScheduledFromIndex;
-
-    UPROPERTY()
-    int32 ScheduledToIndex;
-
-    UPROPERTY()
-    EDirection ScheduledDirection;
+    EDragState DragState;
 
 private:
 
     void Create();
-    void UpdateSlotUI(uint32 SlotIndex);
+
+    void RefreshInventory();
+
     void RemoveItemIcon(uint32 SlotIndex);
+
     void CreateItemIcon(uint32 SlotIndex);
-    void CreateIconCounterText(uint32 SlotIndex);
-    uint32 FindFirstEmptySlot() const;
+
+    int32 FindFirstEmptySlot() const;
+
     EDirection GetMoveDirection(uint32 RowA, uint32 ColA, uint32 RowB, uint32 ColB) const;
+
     FVector2D GetSlotPosition(uint32 SlotIndex) const;
 
-    void MoveItem(const FPointerEvent& MouseEvent, bool bItemMovementStarted, bool bItemMovementFinished);
+    void MoveItem(const FPointerEvent& MouseEvent);
 
-    uint32 FindHoveredItemIndex(const FPointerEvent& InMouseEvent);
+    void RemoveItem(int32 SlotIndex);
 
-    void RefreshInventoryUI();
+    int32 FindHoveredSlot(const FPointerEvent& InMouseEvent);
 };
