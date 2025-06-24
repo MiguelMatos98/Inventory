@@ -21,15 +21,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Inventory.generated.h"
 
-// Direction enum created for setting Item movement
-enum class EDirection : uint8
-{
-    Null,
-    Up,
-    Down,
-    Left,
-    Right
-};
 
 enum class EDragState : uint8
 {
@@ -53,16 +44,22 @@ public:
     // NativeNativeConstruct used for reconstructing inventory Widgets 
     virtual void NativeConstruct() override;
 
-    // NativeOnMouseButtonDown used for keeping track of the hovered slot, mouse position, drag state and dragged item 
+    // ******************** Mouse native events for mouse input detection ********************
+
     virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
     virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
     virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
+    // **************************************************************************************
+
+    // ******************** Open and Close use for inventory toggle on tab ********************
 
     void Open();
 
     void Close();
+    // **************************************************************************************
 
     void AddItem(AActor* ItemActor);
 
@@ -70,6 +67,7 @@ public:
 
     const TArray<FItem>& GetItems() const;
 
+    // This return inventory grey slots 
     TArray<TObjectPtr<UBorder>>  GetForegroundBorders() const;
 
     TObjectPtr<UUniformGridPanel> GetGrid() const;
@@ -116,19 +114,17 @@ private:
     UPROPERTY()
     TObjectPtr<UUniformGridSlot> GridSlot;
 
+    // Widget used for dragging item viusally outsid ethe inventory
     UPROPERTY()
     TObjectPtr<UOverlay> DraggedItemWidget;
 
     static uint32 ItemCounter;
 
     UPROPERTY()
-    int32 DragStartSlot;
+    int32 HoveredSlotIndex;
 
     UPROPERTY()
-    int32 OriginalSlot;
-
-    UPROPERTY()
-    int32 PreviousSlotIndex;
+    int32 OriginSlotIndex;
 
     UPROPERTY()
     FItem DraggedItem;
@@ -147,19 +143,11 @@ private:
 
     void RefreshInventory();
 
-    void RemoveItemIcon(uint32 SlotIndex);
-
     void CreateItemIcon(uint32 SlotIndex);
 
     int32 FindFirstEmptySlot() const;
 
-    EDirection GetMoveDirection(uint32 RowA, uint32 ColA, uint32 RowB, uint32 ColB) const;
-
-    FVector2D GetSlotPosition(uint32 SlotIndex) const;
-
-    void MoveItem(const FPointerEvent& MouseEvent);
-
-    void RemoveItem(int32 SlotIndex);
+    void UpdateInteriorDrag(const FPointerEvent& MouseEvent);
 
     int32 FindHoveredSlot(const FPointerEvent& InMouseEvent);
 };
