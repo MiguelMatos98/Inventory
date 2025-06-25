@@ -1,12 +1,11 @@
 #include "Inventory.h"
 
-uint32 UInventory::ItemCounter = 0;
+//uint32 UInventory::ItemCounter = 0;
 
 UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer),
       MaxRows(3),
       MaxColumns(4),
-      bIsInventoryFull(false),
       Canvas(nullptr),
       Background(nullptr),
       BackgroundSlot(nullptr),
@@ -28,8 +27,8 @@ UInventory::UInventory(const FObjectInitializer& ObjectInitializer)
     Items.SetNum(MaxRows * MaxColumns);
     Slots.SetNum(MaxRows * MaxColumns);
 
-    // Resetting item index back to zero when the player starts to play
-    ItemCounter = 0;
+    //// Resetting item index back to zero when the player starts to play
+    //ItemCounter = 0;
 }
 
 void UInventory::NativeOnInitialized()
@@ -271,7 +270,7 @@ FReply UInventory::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPoi
 
     if (Background)
     {
-        const FGeometry BackgroundBorderGeometry = Backgrounder->GetCachedGeometry();
+        const FGeometry BackgroundBorderGeometry = Background->GetCachedGeometry();
 
         bIsMouseInsideInventoryBounds = BackgroundBorderGeometry.IsUnderLocation(MouseScreenSpacePosition);
     }
@@ -350,19 +349,15 @@ void UInventory::AddItem(AActor* ItemActor)
 {
     if (!ItemActor) return;
 
-    // Inventory is full when it holds (3x4 =) 12 elements
-    if (ItemCounter >= MaxRows * MaxColumns)
-    {
-        bIsInventoryFull = true;
-        return;
-    }
-
     int32 EmptySlot = FindFirstEmptySlot();
     if (EmptySlot == INDEX_NONE)
     {
     
         // When there's no empty slot inventory is full 
-        bIsInventoryFull = true;
+        #if	WITH_EDITOR
+             UE_LOG(LogTemp, Error, TEXT("No free slots because inventory is full!"));
+        #endif
+
         return;
     }
     
@@ -416,9 +411,6 @@ void UInventory::AddItem(AActor* ItemActor)
     RefreshInventory();
 
     ItemActor->Destroy();
-
-    // Find first empty slot only return INDEX_NONE when inventory is full
-    bIsInventoryFull = (FindFirstEmptySlot() == INDEX_NONE);
 }
 
 int32 UInventory::FindHoveredSlot(const FPointerEvent& InMouseEvent)
@@ -722,9 +714,9 @@ void UInventory::Close()
     SetVisibility(ESlateVisibility::Collapsed);
 }
 
-bool UInventory::GetIsInventoryFull() const
+bool UInventory::IsInventoryFull() const
 {
-    return bIsInventoryFull;
+    return (FindFirstEmptySlot() == INDEX_NONE);
 }
 
 const TArray<FItem>& UInventory::GetItems() const
