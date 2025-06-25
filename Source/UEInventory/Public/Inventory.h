@@ -67,7 +67,7 @@ public:
 
     // Checks if the inventory is full
     UFUNCTION()
-    bool GetIsInventoryFull() const;
+    bool IsInventoryFull() const;
 
     // Returns a reference to the item array
     UFUNCTION()
@@ -90,8 +90,8 @@ private:
 
     // **************************************************************************
 
-    UPROPERTY()
-    bool bIsInventoryFull;
+    //UPROPERTY()
+   // bool bIsInventoryFull;
 
     UPROPERTY()
     TArray<FItem> Items;
@@ -134,7 +134,7 @@ private:
     TObjectPtr<UOverlay> DraggedItemWidget;
 
     // Static counter used to assign unique indexes
-    static uint32 ItemCounter;
+   // static uint32 ItemCounter;
 
     // Index of the currently hovered slot
     UPROPERTY()
