@@ -52,6 +52,8 @@ AUEInventoryCharacter::AUEInventoryCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++
+
+	InventoryTagsToIgnore = { "Floor", "Wall" };
 }
 
 void AUEInventoryCharacter::BeginPlay()
@@ -75,78 +77,38 @@ void AUEInventoryCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
         if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
         {
             if (DefaultMappingContext)
-            {
                 Subsystem->AddMappingContext(DefaultMappingContext, 0);
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("DefaultMappingContext is null"));
-            }
         }
     }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController is null"));
-    }
 
-    // Set up action bindings
+	// Bind Input actions (Such as the clicking and toggling)
     if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
     {
-        // Click
         if (ClickAction)
         {
             EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Started, this, &AUEInventoryCharacter::OnClick);
-            EnhancedInputComponent->BindAction(ClickAction, ETriggerEvent::Completed, this, &AUEInventoryCharacter::OnClick);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("ClickAction is null"));
         }
 
-        // Toggle
         if (ToggleAction)
         {
             EnhancedInputComponent->BindAction(ToggleAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::OnToggle);
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("ToggleAction is null"));
-        }
 
-        // Jumping
         if (JumpAction)
         {
             EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
             EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("JumpAction is null"));
-        }
 
-        // Moving
         if (MoveAction)
         {
             EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::Move);
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("MoveAction is null"));
-        }
 
-        // Looking
         if (LookAction)
         {
             EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AUEInventoryCharacter::Look);
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("LookAction is null"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system."), *GetNameSafe(this));
     }
 }
 
@@ -188,125 +150,149 @@ void AUEInventoryCharacter::Look(const FInputActionValue& Value)
 
 void AUEInventoryCharacter::DisplayInventory()
 {
-	if (!Inventory)
+	if (Inventory == nullptr)
 	{
-		// Since inventory isn't initialed through BP
-		// We'll set it up here once UEInventoryCharacter gets instantiated
 		PlayerController = Cast<APlayerController>(GetController());
 		if (PlayerController)
 		{
 			PlayerController->bShowMouseCursor = true;
 			PlayerController->bEnableClickEvents = true;
 			PlayerController->bEnableMouseOverEvents = true;
-		
-			// Create inventory widget
-			Inventory = CreateWidget<UInventory>(PlayerController.Get(), UInventory::StaticClass());
-			UE_LOG(LogTemp,  Warning, TEXT("Inventory has been created"))
 
-			// Check inventory widget creation was successful
-			// in order to add it to the viewport as hidden
+			Inventory = CreateWidget<UInventory>(PlayerController.Get(), UInventory::StaticClass());
 			if (Inventory)
 			{
 				Inventory->AddToViewport();
 				Inventory->SetIsEnabled(true);
 				Inventory->SetVisibility(ESlateVisibility::Visible);
-				UE_LOG(LogTemp,  Warning, TEXT("Inventory has been added to viewport"))
+
+				#if	WITH_EDITOR
+				UE_LOG(LogTemp, Log, TEXT("Inventory Has Been Created Succesfullly"))
+				#endif
 			}
+			
 		}
-	}
-	else
-	{
-		UE_LOG(LogTemp,  Warning, TEXT("Inventory has been already create"))
+		else
+		{
+			#if	WITH_EDITOR
+			UE_LOG(LogTemp, Error, TEXT("PLayerController Cast Has Failed In DisplayInventory()"));
+			#else
+			UE_LOG(LogTemp, Fatal, TEXT("PLayerController Cast Has Failed In DisplayInventory()"));
+			#endif
+			
+		}
 	}
 }
 
 void AUEInventoryCharacter::OnToggle()
 {
-	if (!PlayerController)
+	if (PlayerController == nullptr)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PlayerController is null"));
+		#if	WITH_EDITOR
+		UE_LOG(LogTemp, Error, TEXT("PlayerController Is Null In OnToggle()"));
+		#else
+		UE_LOG(LogTemp, Fatal, TEXT("PlayerController Is Null In OnToggle()"));
+		#endif
+		
 		return;
 	}
     
-	// Toggle visibility
-	if (Inventory->GetVisibility() == ESlateVisibility::Visible)
-	{
-		Inventory->Close();
-	}
-	else
-	{
-		Inventory->Open();
-	}
+	Inventory->GetVisibility() == ESlateVisibility::Visible ? Inventory->Close() : Inventory->Open();
 }
 
 void AUEInventoryCharacter::OnClick(const FInputActionValue& Value)
 {
-    if (!PlayerController || !Inventory) return;
+    if (PlayerController == nullptr)
+    {
+		#if	WITH_EDITOR
+    	UE_LOG(LogTemp, Error, TEXT("PlayerController Is Null In OnClick()"));
+		#else
+    	UE_LOG(LogTemp, Fatal, TEXT("PlayerController Is Null In OnClick()"));
+		#endif
+    	
+    	return;
+    }
 
-    FVector2D MousePosition;
-    if (!PlayerController->GetMousePosition(MousePosition.X, MousePosition.Y))
+	if (Inventory == nullptr)
+	{
+		#if	WITH_EDITOR
+		UE_LOG(LogTemp, Error, TEXT("Inventory Is Null In OnClick()"));
+		#else
+		UE_LOG(LogTemp, Fatal, TEXT("PlayerController Is Null In OnClick()"));
+		#endif
+		
+		return;
+	}
+	
+    const bool bIsMuseCLickDown = (Value.GetMagnitude() > 0.0f);
+	
+    if (!bIsMuseCLickDown)
     {
         return;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Screen Mouse Position (Viewport Space): X=%f Y=%f"), MousePosition.X, MousePosition.Y);
+	
+	// No more items can be added when invenotory is full
+	if (Inventory->IsInventoryFull())
+	{
+		#if	WITH_EDITOR
+		UE_LOG(LogTemp, Error, TEXT("Inventory Is Full In OnClick()"));
+		#endif
+		
+		return;
+	}
+	
+	FVector2D MousePosition;
+	if (!PlayerController->GetMousePosition(MousePosition.X, MousePosition.Y))
+	{
+		#if	WITH_EDITOR
+		UE_LOG(LogTemp, Error, TEXT("PlayerController Failed To Get Mouse Position In OnClick()"));
+		#else
+		UE_LOG(LogTemp, Fatal, TEXT("PlayerController Failed To Get Mouse Position In OnClick()"));
+		#endif
+		
+		return;
+	}
+	
+	// Convert mouse coordinates to world space
+	FVector MouseWorldOrigin, MouseWorldDirection;
+	if (!PlayerController->DeprojectMousePositionToWorld(MouseWorldOrigin, MouseWorldDirection))
+	{
+		#if WITH_EDITOR
+		UE_LOG(LogTemp, Error, TEXT("DeprojectMousePositionToWorld failed in OnClick()"));
+		#else
+		UE_LOG(LogTemp, Fatal, TEXT("DeprojectMousePositionToWorld failed in OnClick()"));
+		#endif
+		
+		return;
+	}
 
-    bool bIsPress = Value.GetMagnitude() > 0;
-    TSet<FKey> PressedButtons;
-    if (bIsPress)
+	
+    if (bIsMuseCLickDown)
     {
-        PressedButtons.Add(EKeys::LeftMouseButton);
-    }
+        FHitResult Hit;
 
-    FPointerEvent MouseEvent(
-        0,                          // PointerIndex
-        MousePosition,              // ScreenSpacePosition
-        MousePosition,              // LastScreenSpacePosition
-        PressedButtons,             // PressedButtons
-        EKeys::LeftMouseButton,     // EffectingButton
-        0.0f,                       // WheelDelta
-        FModifierKeysState()        // ModifierKeys
-    );
+        FCollisionQueryParams CollisionQuery;
 
-    int32 HoveredIndex = Inventory->FindHoveredItemIndex(MouseEvent);
+		constexpr float TraceDistance = 1000.0f;
 
-    if (HoveredIndex != INDEX_NONE && bIsPress)
-    {
-        Inventory->MoveItem(MouseEvent, true, false);
-        return; // Slate handles dragging
-    }
-    else if (HoveredIndex != INDEX_NONE && !bIsPress)
-    {
-        return; // NativeOnMouseButtonUp handles release
-    }
+		// Calculate vector for line trace distance and ignore self
+        FVector FinalTracePosition = MouseWorldOrigin + (MouseWorldDirection * TraceDistance);
 
-    // World pickup on press only
-    if (bIsPress && !Inventory->GetIsInventoryFull())
-    {
-        FVector MouseWorldLocation, MouseWorldDirection;
-        if (PlayerController->DeprojectMousePositionToWorld(MouseWorldLocation, MouseWorldDirection))
+        CollisionQuery.AddIgnoredActor(this);
+
+        if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldOrigin, FinalTracePosition, ECC_Visibility, CollisionQuery))
         {
-            FHitResult Hit;
-            constexpr float TraceDistance = 1000.0f;
-            FVector FinalTracePosition = MouseWorldLocation + (MouseWorldDirection * TraceDistance);
-
-            FCollisionQueryParams CollisionQuery;
-            CollisionQuery.AddIgnoredActor(this);
-
-            UE_LOG(LogTemp, Log, TEXT("Mouse Projected to World"));
-
-            if (GetWorld()->LineTraceSingleByChannel(Hit, MouseWorldLocation, FinalTracePosition, ECC_Visibility, CollisionQuery))
-            {
-                if (Hit.GetActor())
-                {
-                    UE_LOG(LogTemp, Log, TEXT("Hit: %s"), *Hit.GetActor()->GetName());
-                    Inventory->AddItem(Hit.GetActor());
-                }
-            }
+		    for (const FName& IgnoreTag : InventoryTagsToIgnore)
+			{
+				 // Return when player tries to add a floor or wall objects to the inventory to keep level intact
+				if (Hit.GetActor()->ActorHasTag(IgnoreTag)) return;	
+			}
+           	
+           	if (Hit.GetActor())
+           	{
+           		Inventory->AddItem(Hit.GetActor());
+           	}
         }
-    }
-    else if (bIsPress && Inventory->GetIsInventoryFull())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Inventory is full"));
     }
 }
