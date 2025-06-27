@@ -90,9 +90,6 @@ private:
 
     // **************************************************************************
 
-    //UPROPERTY()
-   // bool bIsInventoryFull;
-
     UPROPERTY()
     TArray<FItem> Items;
 
@@ -129,12 +126,9 @@ private:
     UPROPERTY()
     TObjectPtr<UUniformGridSlot> GridSlot;
 
-    // Widget used to visually represent the dragged item
+    // Visual Representation of PoppedOutItem
     UPROPERTY()
-    TObjectPtr<UOverlay> DraggedItemWidget;
-
-    // Static counter used to assign unique indexes
-   // static uint32 ItemCounter;
+    TObjectPtr<UOverlay> PoppedOutItemWidget;
 
     // Index of the currently hovered slot
     UPROPERTY()
@@ -144,10 +138,9 @@ private:
     UPROPERTY()
     int32 OriginSlotIndex;
 
-    // DragItem used to keep track of any changes on the
-    // item atributes during any inventory operations
+    // PoppedOutItem used to copy internal item when item outside inventoty 
     UPROPERTY()
-    FItem DraggedItem;
+    FItem PoppedOutItem;
 
     // Mouse position in screen space
     UPROPERTY()
@@ -159,6 +152,9 @@ private:
 
     // Current drag state
     EDragState DragState;
+
+    UPROPERTY()
+    bool bIsMouseInsideInventory;
 
 private:
 
@@ -178,9 +174,9 @@ private:
     UFUNCTION()
     int32 FindFirstEmptySlot() const;
 
-    // Updates the dragged item’s position and logic
+    // Resposible for updating all items position on drag
     UFUNCTION()
-    void UpdateInteriorDrag(const FPointerEvent& MouseEvent);
+    void InternallyRearrangeItems(const FPointerEvent& MouseEvent);
 
     // Returns the index of the hovered slot under the mouse
     UFUNCTION()
