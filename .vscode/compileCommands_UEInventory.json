@@ -1,0 +1,82 @@
+[
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/Item.h",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/Private/Inventory.cpp",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/Public/Inventory.h",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventory.Build.cs",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventory.cpp",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventory.h",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventoryCharacter.cpp",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventoryCharacter.h",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventoryGameMode.cpp",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	},
+	{
+		"file": "/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/Source/UEInventory/UEInventoryGameMode.h",
+		"arguments": [
+			"/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Extras/ThirdPartyNotUE/SDKs/HostLinux/Linux_x64/v22_clang-16.0.6-centos7/x86_64-unknown-linux-gnu/bin/clang++",
+			"@/home/miguel/Desktop/UE_Projects/Temporary_Folder_For_FMP/.vscode/compileCommands_UEInventory/UEInventory.1.rsp"
+		],
+		"directory": "/home/miguel/Desktop/Linux_Unreal_Engine_5.4.4/Engine/Source"
+	}
+]
