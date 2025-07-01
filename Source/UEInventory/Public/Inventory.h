@@ -182,4 +182,3 @@ private:
     UFUNCTION()
     int32 FindHoveredSlot(const FPointerEvent& InMouseEvent);
 };
-
