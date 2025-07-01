@@ -1,14 +1,18 @@
 #include "Item.h"
 
+// Initializing Members With Default Values
 FItem::FItem()
-	: 	Texture(nullptr),
-		WorldObjectReverence(nullptr),
-		WorldObjectTransform(FTransform::Identity),
-		Index(0)
+  : 
+  Texture(nullptr),
+	WorldObjectReverence(nullptr),
+	WorldObjectTransform(FTransform::Identity),
+	Index(0)
 {
 }
 
 bool FItem::operator==(const FItem& Other) const
 {
-	return WorldObjectReverence == Other.WorldObjectReverence && Index == Other.Index;
+	// Returns True When Two Items Are Equal
+	return WorldObjectReference == Other.WorldObjectReference && Index == Other.Index;
 }
+

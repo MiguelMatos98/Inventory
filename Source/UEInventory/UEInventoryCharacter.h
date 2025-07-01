@@ -58,6 +58,9 @@ class AUEInventoryCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, Category = "Inventory UI")
 	TObjectPtr<UInventory> Inventory;
 
+	UPROPERTY(EditAnywhere, Category = "Inventory")
+	TArray<FName> InventoryTagsToIgnore;
+
 public:
 	
 	AUEInventoryCharacter();

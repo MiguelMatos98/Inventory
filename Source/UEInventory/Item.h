@@ -21,7 +21,7 @@ struct FItem
     // Item's World Object Transform
     UPROPERTY(VisibleAnywhere, Category = "Items")
     FTransform WorldObjectTransform;
-
+  
     // Item Reference to World Object's Mesh  
     UPROPERTY(VisibleAnywhere, Category = "Items")
     TSoftObjectPtr<UStaticMesh> StaticMesh;
